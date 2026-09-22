@@ -40,6 +40,54 @@
       "expected_output": "使用 doc export 的显式输出、素材、front matter 与 mention 展开参数，并验证文件及素材。",
       "expectations": ["命令使用 doc export doxcnxxx --output /tmp/report.md", "命令包含 --download-images、--assets-dir /tmp/report-assets、--front-matter 和 --expand-mentions", "验证 /tmp/report.md 存在且非空，并检查素材目录"],
       "files": []
+    },
+    {
+      "id": 6,
+      "workflows": ["write"],
+      "prompt": "把附件 remote-image.md 追加到已有文档 doxcn_fixture，保留其中的网络图片。只给出准确命令，不要新建文档。",
+      "expected_output": "使用 content-update append 加 markdown-file，不传 upload-images。",
+      "expectations": ["使用 doc content-update doxcn_fixture --mode append --markdown-file 指向附件", "命令不包含 --upload-images", "保留原始 https 图片 URL，不把网络图改成本地路径"],
+      "files": ["evals/fixtures/remote-image.md"]
+    },
+    {
+      "id": 7,
+      "workflows": ["write"],
+      "prompt": "local-image.md 含本地图片。直接运行 content-update --upload-images 能把它追加到现有文档吗？解释实际限制并给出合适的可选方案，暂不执行。",
+      "expected_output": "明确当前 content-update 会拒绝该 flag 和本地资源；按编辑意图选择网络 URL、doc add 或单素材插入。",
+      "expectations": ["明确 --upload-images 会被 content-update 拒绝，而不是承诺能上传", "说明直接删除 flag 仍不能使用本地图片路径", "给出网络 URL、doc add --upload-images 或 doc media-insert 等适配方案；不把 import 新建文档当作原地替换"],
+      "files": ["evals/fixtures/local-image.md"]
+    },
+    {
+      "id": 8,
+      "workflows": ["write"],
+      "prompt": "本次用 --config owner-config.yaml 创建文档，owner 只配置在该文件，用户没有要求转移所有权。按附件配置给出授权前的读取命令及后续动作，不执行。",
+      "expected_output": "沿用 --config 查询生效 owner_email 与 transfer_ownership，只按配置授权，不转移所有权。",
+      "expectations": ["两次 config get 均沿用 --config owner-config.yaml 或其实际路径", "不固定读取 ~/.feishu-cli/config.yaml，也不要求用户重新设置环境变量", "按 owner_email 添加权限，并根据 transfer_ownership=false 不执行 transfer-owner"],
+      "files": ["evals/fixtures/owner-config.yaml"]
+    },
+    {
+      "id": 9,
+      "workflows": ["export"],
+      "prompt": "cron 里只配置 App ID/Secret，用 Bot 把 doxcn_fixture 导出 PDF。先给 dry-run 预览命令，不要要求人工登录。",
+      "expected_output": "drive export 指定 --as bot 与 --dry-run。",
+      "expectations": ["使用 drive export --token doxcn_fixture --doc-type docx --file-extension pdf --as bot --dry-run", "不要求 auth login 或 User Token"],
+      "files": []
+    },
+    {
+      "id": 10,
+      "workflows": ["import"],
+      "prompt": "把附件 remote-image.md 导入为飞书文档，结果在当前会话给我，不要另发消息。先说明执行步骤，暂不执行。",
+      "expected_output": "导入后在当前会话返回链接和统计，保留用户明确的交付方式。",
+      "expectations": ["使用 doc import，并在导入前读取 doc-guide", "在当前会话交付文档链接和导入统计", "不安排 msg send 或其他飞书消息通知"],
+      "files": ["evals/fixtures/remote-image.md"]
+    },
+    {
+      "id": 11,
+      "workflows": ["markdown"],
+      "prompt": "markdown overwrite 未传 --name，读到的远端标题为空。CLI 会用 file_token.md 接着上传吗？同一个 token 的 25MB Markdown 想更新，能否用 drive upload --file-token？",
+      "expected_output": "空远端名拒绝上传；markdown overwrite 支持大于20MB分片，而 drive upload 覆盖限制20MB。",
+      "expectations": ["说明读取不到现有文件名时非零退出且不会自动重命名上传", "指向确认原名后显式 --name 或修复元数据读取", "25MB 覆盖应使用 markdown overwrite，不推荐超过上限的 drive upload --file-token"],
+      "files": []
     }
   ]
 }

@@ -1,4 +1,4 @@
-.PHONY: build check-skills clean install test lint fmt help update-meta
+.PHONY: build check-skills check-skill-contracts clean install test lint fmt help update-meta
 
 # Go parameters
 GOCMD=go
@@ -32,9 +32,14 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 
-## check-skills: Build current source and validate Skill structure and command ownership
+## check-skills: Build current source; check Skill YAML, examples, ownership and offline behavior
 check-skills: build
 	python3 scripts/check_skills.py ./$(BUILD_DIR)/$(BINARY_NAME)
+	python3 scripts/run_skill_regressions.py ./$(BUILD_DIR)/$(BINARY_NAME)
+
+## check-skill-contracts: Build current source and run offline CLI contracts (no live Feishu API)
+check-skill-contracts: build
+	python3 scripts/check_skill_contracts.py ./$(BUILD_DIR)/$(BINARY_NAME)
 
 ## install: Install the binary to $GOPATH/bin
 install:

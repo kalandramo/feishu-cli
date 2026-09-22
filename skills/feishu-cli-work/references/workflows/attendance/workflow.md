@@ -9,7 +9,7 @@
 ### 身份与权限支持
 
 - **支持 User Access Token 与 Tenant Access Token**。
-- 使用 User Token 时支持**本人自查路径**：`--employee-type employee_no` 且无需传 `--user-ids`，系统自动返回当前登录用户本人的打卡/统计记录。
+- 使用 User Token 时支持**本人自查路径**：`--employee-type employee_no` 且无需传 `--user-ids`，系统自动返回当前登录用户本人的打卡记录；该能力仅适用于 `user-task query`。`user-stats query` 仍需显式用户列表并走 Tenant Token。
 - 权限范围（User 或 Tenant 级别）：
   - `attendance:task:readonly`（推荐，仅查询打卡和统计数据，不可写入修改）
   - `attendance:task`（含写入）

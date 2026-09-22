@@ -5,9 +5,9 @@
 
 > **feishu-cli**：如尚未安装，请前往 [riba2534/feishu-cli](https://github.com/riba2534/feishu-cli) 获取安装方式。
 
-> **范围声明**：本技能只覆盖「创建空白演示文稿」+「上传媒体」两个最小可用动作。如需在已有
+> **范围声明**：本工作流覆盖创建空白演示文稿、读取 SML 内容和上传媒体。如需在已有
 > 演示文稿里做复杂 slide 编辑（block insert/replace 等），目前 CLI 未实现，请改走
-> 官方 `lark-slides` 客户端或 OpenAPI 直调。
+> 官方 `lark-slides` 客户端或 `feishu-cli api` 透传对应 OpenAPI。
 
 ## 核心概念
 
@@ -40,16 +40,20 @@
 
 ## 前置条件
 
-- **认证**：默认走 **App Token**（租户身份），通过 `--user-access-token` 或 `FEISHU_USER_ACCESS_TOKEN`
-  可切换 User Token（推荐用 User Token，以个人身份创建，便于后续直接在飞书里编辑）
+- **认证**：`create` / `media-upload` 默认 **App Token**；显式 `--user-access-token` 或
+  `FEISHU_USER_ACCESS_TOKEN` 可切换用户身份。`get` 优先使用已登录 User Token，未配置时回落 App Token。
 - **权限**：
   | 命令 | 所需 scope |
   |------|-----------|
   | `slides create` | `slides:presentation:create` 或 `slides:presentation:write_only` |
+  | `slides get` | `slides:presentation:read` |
   | `slides media-upload` | `docs:document.media:upload` |
 - **预检**：`feishu-cli auth check --scope "slides:presentation:create docs:document.media:upload"`
 
 ## 命令速查
+
+读取已有演示文稿：`feishu-cli slides get <xml_presentation_id> --output json`；
+需要历史版本时加 `--revision-id <revision>`，默认 `-1` 表示最新版本。
 
 ### 1. `slides create` — 创建空白演示文稿
 
@@ -165,7 +169,7 @@ done
 
 | 场景 | 改走 |
 |------|------|
-| 在已有演示文稿里插入/修改/删除 slide 或 block | `lark-slides`（官方 CLI）或 OpenAPI 直调 `slides_ai/v1/...` 编辑接口 |
+| 在已有演示文稿里插入/修改/删除 slide 或 block | `lark-slides`（官方 CLI）或 `feishu-cli api` 透传 `slides_ai/v1/...` 编辑接口 |
 | 直接传整个 presentation XML 模板 | 暂未暴露 `--xml-file`，等 CLI 扩展或 OpenAPI 直调 |
 | 单文件 > 20 MB 的媒体 | 拆分小图，或直接走飞书客户端上传 |
 | 把 markdown / docx 转成 slides | 暂不支持，建议先转 docx 再用飞书客户端导出 |

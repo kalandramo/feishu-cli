@@ -100,33 +100,37 @@ feishu-cli doc export-file <sheet_token> --doc-type sheet --type xlsx -o /tmp/re
 
 ## 长任务/可恢复导出（drive export）
 
-`drive export` 是 export_tasks 异步流程的封装：**创建任务 → 有界轮询（默认最多 10 次、每次 5s） → 下载**。超时未完成时返回 `next_command`，可用 `drive task-result` 或 `drive export-download` 接力，避免长任务把 CLI 挂死。
+`drive export` 对 docx → Markdown 直接读取正文；其他格式使用 export_tasks：**创建任务 → 有界轮询（默认最多 10 次、每次 5s） → 下载**。超时未完成时返回 `next_command`，可用 `drive task-result` 或 `drive export-download` 接力。
 
 ```bash
 # 普通文档导出 Markdown（也可直接走 doc export 快捷路径）
 feishu-cli drive export --token <docx_token> --doc-type docx --file-extension markdown --output-dir ./out
 
 # 电子表格单 sheet 导出 CSV（sub-id 必填）
-feishu-cli drive export --token <sheet_token> --doc-type sheet --file-extension csv --sub-id 0 --output-dir ./out --overwrite
+feishu-cli drive export --token <sheet_token> --doc-type sheet --file-extension csv --sub-id <sheet_id> --output-dir ./out --overwrite
 
 # 多维表格单表导出 CSV
 feishu-cli drive export --token <bitable_token> --doc-type bitable --file-extension csv --sub-id <table_id> --output-dir ./out
+
+# Bot/cron 场景固定身份；dry-run 仅预览，不解析或刷新用户 Token
+feishu-cli drive export --token <docx_token> --doc-type docx --file-extension pdf --as bot --dry-run
 ```
 
 | 参数 | 说明 | 默认 |
 |---|---|---|
 | `--token` | 源文档 token | 必填 |
-| `--doc-type` | `doc` / `docx` / `sheet` / `bitable` | 必填 |
-| `--file-extension` | `docx` / `pdf` / `xlsx` / `csv` / `markdown` | 必填 |
+| `--doc-type` | `doc` / `docx` / `sheet` / `bitable` / `slides` / `wiki`（先解析节点） | 必填 |
+| `--file-extension` | `docx` / `pdf` / `xlsx` / `csv` / `markdown` / `base` / `pptx`，须与源类型匹配 | 必填 |
 | `--sub-id` | sheet/bitable → csv 时必填的子表/工作表 ID | 空 |
 | `--output-dir` | 输出目录 | `.` |
 | `--overwrite` | 已存在时覆盖 | false |
 | `-o, --output` | 设为 `json` 时返回结构化结果（含 next_command） | 文本 |
-| `--user-access-token` | 覆盖登录态（必须 User Token） | 自动 |
+| `--as` | `bot` / `user` / `auto`；cron 显式用 `bot` | `auto` |
+| `--user-access-token` | 显式提供用户身份 Token | 自动 |
 
 **轮询超时接力**：JSON 输出中 `next_command` 形如 `feishu-cli drive task-result --scenario export --ticket <ticket> --file-token <doc_token>`；任务已 success 但下载失败则给 `drive export-download --file-token ...`。直接执行该命令即可续上。
 
-**权限**：必须 User Token；scope 需要 `docs:document:export` + `drive:drive.metadata:readonly`。
+**身份与权限**：支持 User/Bot；`auto` 优先 User、未配置时回退 Bot，已配置 User 但解析/刷新失败会报错。具体 scope、格式矩阵与接力命令以 [Drive 工作流](../../../../feishu-cli-storage/references/workflows/drive/workflow.md) 为准，续跑时保持同一身份。
 
 ## 本地文件导入提醒
 

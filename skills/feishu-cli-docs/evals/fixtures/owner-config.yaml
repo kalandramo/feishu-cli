@@ -1,0 +1,4 @@
+app_id: cli_fixture
+app_secret: fixture
+owner_email: user@example.com
+transfer_ownership: false

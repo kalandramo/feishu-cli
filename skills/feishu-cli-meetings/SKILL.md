@@ -1,13 +1,9 @@
 ---
 name: feishu-cli-meetings
 description: >-
-  飞书视频会议与妙记专用入口，覆盖会议搜索、纪要与 AI 产物、逐字稿、录制、妙记媒体下载、
-  会议机器人入会/离会和会议事件。用户要求按日程或时间查找历史会议、获取会议纪要/AI 摘要、
-  minute token、下载录制/视频/逐字稿、操作 meeting bot 或查询妙记时必须使用本 Skill。创建日程和找会议时间
-  使用 feishu-cli-work。
-argument-hint: <vc|minutes> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Read, Write
+  查询飞书历史视频会议、纪要、AI 摘要、逐字稿和录制，按 minute token 读取或下载妙记，操作会议机器人入会/离会及查询会议事件。创建日程、找共同空闲时间和预订会议室使用 feishu-cli-work。
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Read Write
 ---
 
 # 飞书会议与妙记
@@ -20,9 +16,9 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Read, Write
 
 - `vc search/notes/recording/detail`、`vc note detail/transcript` 和 minutes 命令必须使用 User Token。
 - `vc bot meeting-join/meeting-leave` 默认 Bot 身份，而且只在显式 flag 时切换 User Token。
-- `vc bot meeting-events` 必须显式 `--as bot|user|auto`（默认 auto），身份须与
+- `vc bot meeting-events` 支持 `--as bot|user|auto`（默认 auto），建议按来源显式选身份，须与
   `meeting_id` 来源一致：`--as user` 预检 `vc:meeting.meetingevent:read`；`--as bot`
-  预检 `vc:meeting.bot.join:write` 且机器人须在会中。`--as auto` 刷新/token 文件错误
+  确认应用已开通 `vc:meeting.bot.join:write` 且机器人须在会中，不能用 User `auth check` 替代。`--as auto` 刷新/token 文件错误
   fail-closed，禁止静默切 Bot；`--dry-run` 只静态探测身份，不联网不写 token。
 
 下载媒体时保留服务端文件名；无法解析扩展名时再按 Content-Type 推导。

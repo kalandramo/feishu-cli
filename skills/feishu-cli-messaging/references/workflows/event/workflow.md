@@ -223,7 +223,8 @@ feishu-cli event consume approval.instance.status_changed_v4
 
 ### 默认 App Token，无需 `auth login`
 
-事件订阅走 App 身份（app_id + app_secret），**不强制 user token**。配好 `~/.feishu-cli/config.yaml` 或 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 环境变量即可。
+WebSocket 连接本身走 App 身份（app_id + app_secret）。普通事件不强制 User Token；
+审批 v4 和 VC 事件还需用户身份完成前置订阅注册，详见上文相应章节。配好 `~/.feishu-cli/config.yaml` 或 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 环境变量即可。
 
 ### 飞书开放平台两步配置
 

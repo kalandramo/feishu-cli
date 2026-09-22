@@ -4,7 +4,7 @@
 - **`feishu-cli schema`** —— 查询 OpenAPI 方法的 path/动词/参数/scope/文档链接（无需 Token；catalog overlay 为无凭证 public meta）
 - **`feishu-cli api`** —— 直接调用任意飞书 OpenAPI 端点（v1.29+，自动鉴权 + 错误码翻译，覆盖未封装的 2500+ 端点）
 
-典型工作流：`schema list 发现` → `schema get 看参数 + scope` → `feishu-cli auth check/login` 补 scope → `feishu-cli api` 调用。
+典型工作流：`schema list 发现` → `schema <service.resource.method>` 看参数与身份 → 按执行身份预检 → `feishu-cli api` 调用。
 
 > **feishu-cli**：如尚未安装，请前往 [riba2534/feishu-cli](https://github.com/riba2534/feishu-cli) 获取安装方式。
 
@@ -147,14 +147,13 @@ feishu-cli schema im.chats.create
 #       Identity: tenant (bot)
 #       Scopes:   im:chat
 
-# Step 2: scope 不够时补
-feishu-cli auth check --scope "im:chat"
-feishu-cli auth login --scope "im:chat"          # 缺则补
+# Step 2: 本例选择 Bot，确认应用已开通 im:chat；User 登录不能替代应用授权
+feishu-cli doctor --only bot_identity
 
-# Step 3: 直接调（无需写代码 / 无需 curl）
+# Step 3: 本地预览；用户已授权创建且参数核对后去掉 --dry-run 执行
 feishu-cli api POST /open-apis/im/v1/chats \
   --data '{"name":"测试群","description":"by feishu-cli api"}' \
-  --as bot
+  --as bot --dry-run
 ```
 
 ### `feishu-cli api` 关键 flag

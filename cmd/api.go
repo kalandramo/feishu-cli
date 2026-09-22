@@ -99,7 +99,7 @@ func init() {
 	apiCmd.Flags().BoolVar(&apiPageAll, "page-all", false, "自动翻页（仅识别 data.has_more + page_token/next_page_token）")
 	apiCmd.Flags().IntVar(&apiPageLimit, "page-limit", 10, "配合 --page-all 的最大页数（0=不限；空/重复 cursor 仍会停止）")
 	apiCmd.Flags().IntVar(&apiPageDelayMs, "page-delay", 200, "翻页间隔毫秒")
-	apiCmd.Flags().String("user-access-token", "", "显式传入 User Access Token（覆盖 --as）")
+	apiCmd.Flags().String("user-access-token", "", "显式 User Token（用于 auto/user；--as bot 固定应用身份）")
 
 	rootCmd.AddCommand(apiCmd)
 }

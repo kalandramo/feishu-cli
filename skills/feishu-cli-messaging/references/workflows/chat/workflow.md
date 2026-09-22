@@ -62,6 +62,11 @@ python3 skills/feishu-cli-messaging/references/workflows/chat/scripts/fetch_chat
 | `names.json` | 合并后的 open_id / app_id → 名字映射 |
 | `timeline.txt` | **可读时间线**：主消息升序 + 缩进 4 空格的线程回复（`└─` 标识） |
 
+读取或 JSON 解析失败、后续页游标为空/重复、历史达到 99 页或单线程达到 50 页仍未结束时，
+脚本会非零退出并说明未完成，不能把已有文件当作本次完整导出。分页重叠按 message_id 去重。
+时间窗筛选的是根消息创建时间；展开后包含这些话题的完整回复。旧话题在窗口内的新回复，
+需结合 `search messages` 或已知 thread_id 另查，不应将此脚本当作所有消息的时间窗统计器。
+
 脚本默认行为：
 
 1. `msg history` 用 `ByCreateTimeAsc + start-time + end-time`，按 page_token 翻页到 `has_more=false`；
@@ -91,7 +96,7 @@ feishu-cli msg history --user-id ou_xxx --page-size 50 -o json
 
 # 时间窗内全部消息（升序 + 翻页）
 feishu-cli msg history --container-id oc_xxx --container-id-type chat \
-    --start-time $(date -v-24H +%s) --end-time $(date +%s) \
+    --start-time "$(python3 -c 'import time; print(int(time.time())-86400)')" --end-time "$(date +%s)" \
     --sort-type ByCreateTimeAsc --page-size 50 -o json
 
 # 单条 / 批量消息详情（mget 单次 /im/v1/messages/mget，每批最多 50，禁止逐条 Get）
@@ -245,7 +250,8 @@ feishu-cli chat member list oc_xxx --as bot
 
 1. JSON 落到临时文件再分析，避免长消息刷屏；
 2. 文本内容在 `body.content` 里，按 `msg_type` 解析 JSON 字符串（撤回消息除外，见上）；
-3. `mentions` 字段同时含 open_id → name 映射 + `@_user_N` key → name 映射，比 `sender_names` 更全，优先用。
+3. 发送者优先使用服务端 `sender_names`；`mentions` 提供其余人名与 `@_user_N` 替换。
+   已知 Bot 名称保留，缺失时才用兜底名；多个未知 Bot 保留 app_id 以便区分。
 
 ## 卡片消息（interactive）
 

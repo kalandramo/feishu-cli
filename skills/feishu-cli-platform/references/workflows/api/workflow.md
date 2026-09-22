@@ -27,8 +27,8 @@ OpenAPI host：`open.feishu.cn` / `open.larksuite.com` / `open.larkoffice.com`�
 |------|------|
 | `--params '<json>'` | query 参数（**单个** JSON 对象），如 `'{"page_size":10}'`；尾部有多余内容（如 `'{"a":1} {"b":2}'`）会报错而非静默只取前半 |
 | `--data '<json>'` / `--data-file <file>` | 请求体：`--data` 传 JSON 字符串，或 `--data-file` 从文件读（`-` 表示 stdin）；二者互斥 |
-| `--as auto\|user\|bot` | 身份：auto（User 优先 Tenant 兜底，默认）/ user（强制 User Token，需先 `auth login`）/ bot（强制 Tenant/应用 Token） |
-| `--user-access-token` | 显式传 User Access Token（显式传入时无条件生效，覆盖 `--as`） |
+| `--as auto\|user\|bot` | 身份：auto（未配置 User 时回退 Tenant；已配置但不可用时失败，默认）/ user（强制 User Token，需先 `auth login`）/ bot（强制 Tenant/应用 Token） |
+| `--user-access-token` | 显式 User Token，仅 auto/user 路径解析；`--as bot` 强制应用身份，不用 User Token |
 | `--dry-run` | 只打印将发送的请求（method/path/query/body/identity），不实际调用 |
 | `-o <file>` | 写原始响应体到文件（binary-safe，适合下载类接口） |
 | `--raw` | 原样输出响应 body，不做 pretty JSON |

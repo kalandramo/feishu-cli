@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""验证 Skill 结构与编译后二进制的命令归属。
+"""验证 Skill 结构、真实 YAML 元数据及编译后二进制的命令契约。
 
 manifest.yaml 使用 JSON 子集，避免为检查脚本引入 PyYAML 依赖。
 """
@@ -7,10 +7,14 @@ manifest.yaml 使用 JSON 子集，避免为检查脚本引入 PyYAML 依赖。
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+from functools import lru_cache
+
+from skill_command_contracts import check_examples, parse_help
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,7 +71,8 @@ def fail(message: str, errors: list[str]) -> None:
     errors.append(message)
 
 
-def command_info(binary: Path, path: tuple[str, ...]) -> tuple[list[str], bool]:
+@lru_cache(maxsize=None)
+def command_help(binary: Path, path: tuple[str, ...]) -> str:
     proc = subprocess.run(
         [str(binary), *path, "--help"],
         cwd=ROOT,
@@ -75,14 +80,19 @@ def command_info(binary: Path, path: tuple[str, ...]) -> tuple[list[str], bool]:
         capture_output=True,
         timeout=30,
         check=False,
+        env={**os.environ, "FEISHU_CLI_REMOTE_META": "off"},
     )
     if proc.returncode != 0:
         raise RuntimeError(f"{' '.join(path) or '<root>'} --help 失败: {proc.stderr.strip()}")
+    return proc.stdout
+
+
+def command_info(binary: Path, path: tuple[str, ...]) -> tuple[list[str], bool]:
 
     commands: list[str] = []
     in_section = False
     usage = ""
-    lines = proc.stdout.splitlines()
+    lines = command_help(binary, path).splitlines()
     for index, line in enumerate(lines):
         if line.strip() == "Usage:":
             for candidate in lines[index + 1 :]:
@@ -123,23 +133,60 @@ def starts_with(path: tuple[str, ...], prefix: tuple[str, ...]) -> bool:
     return path[: len(prefix)] == prefix
 
 
-def check_frontmatter(skill_dir: Path, errors: list[str]) -> None:
+def load_frontmatters(paths: list[Path]) -> dict:
+    """复用已有 Go YAML 依赖；不要求开发者安装 PyYAML。"""
+    proc = subprocess.run(
+        ["go", "run", "./scripts/skillmeta", *(str(path) for path in paths)],
+        cwd=ROOT, text=True, capture_output=True, timeout=120, check=False,
+    )
+    if proc.returncode:
+        raise RuntimeError(f"YAML 解析器执行失败: {proc.stderr.strip()}")
+    return json.loads(proc.stdout)
+
+
+def validate_metadata(metadata: dict, directory_name: str) -> list[str]:
+    errors: list[str] = []
+    allowed = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+    if not isinstance(metadata, dict):
+        return ["frontmatter 必须是 mapping"]
+    unknown = sorted(set(metadata) - allowed)
+    if unknown:
+        errors.append(f"包含非 Agent Skills 标准字段: {', '.join(unknown)}")
+    name = metadata.get("name")
+    if not isinstance(name, str) or not 1 <= len(name) <= 64 or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        errors.append("name 必须是 1–64 字符的小写字母/数字/单连字符名称")
+    elif name != directory_name:
+        errors.append("name 与目录不一致")
+    description = metadata.get("description")
+    if not isinstance(description, str) or not description.strip() or len(description) > 1024:
+        errors.append("description 必须是非空字符串且不超过 1024 字符")
+    for key in ("license", "compatibility", "allowed-tools"):
+        value = metadata.get(key)
+        if key in metadata and (not isinstance(value, str) or not value.strip()):
+            errors.append(f"{key} 必须是非空字符串")
+    compatibility = metadata.get("compatibility")
+    if isinstance(compatibility, str) and len(compatibility) > 500:
+        errors.append("compatibility 不得超过 500 字符")
+    if "metadata" in metadata:
+        extra = metadata["metadata"]
+        if not isinstance(extra, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in extra.items()):
+            errors.append("metadata 必须是字符串键值 mapping")
+    return errors
+
+
+def check_frontmatter(skill_dir: Path, errors: list[str], parsed: dict | None = None) -> None:
     skill_file = skill_dir / "SKILL.md"
     if not skill_file.exists():
         fail(f"缺少 {skill_file.relative_to(ROOT)}", errors)
         return
     text = skill_file.read_text(encoding="utf-8")
     lines = text.splitlines()
-    if not lines or lines[0] != "---" or "---" not in lines[1:]:
-        fail(f"{skill_file.relative_to(ROOT)} frontmatter 无效", errors)
-        return
-    end = lines[1:].index("---") + 1
-    frontmatter = "\n".join(lines[1:end])
-    name_match = re.search(r"^name:\s*(\S+)\s*$", frontmatter, re.MULTILINE)
-    if not name_match or name_match.group(1) != skill_dir.name:
-        fail(f"{skill_file.relative_to(ROOT)} name 与目录不一致", errors)
-    if not re.search(r"^description:\s*", frontmatter, re.MULTILINE):
-        fail(f"{skill_file.relative_to(ROOT)} 缺少 description", errors)
+    result = parsed if parsed is not None else load_frontmatters([skill_file])[str(skill_file)]
+    if result.get("error"):
+        fail(f"{skill_file.relative_to(ROOT)} {result['error']}", errors)
+    else:
+        for message in validate_metadata(result.get("metadata"), skill_dir.name):
+            fail(f"{skill_file.relative_to(ROOT)} {message}", errors)
     if len(lines) >= 500:
         fail(f"{skill_file.relative_to(ROOT)} 共 {len(lines)} 行，应小于 500 行", errors)
 
@@ -312,6 +359,35 @@ def check_trigger_evals(
             fail(f"{skill} 触发评测集不是 8 正例 + 8 近邻负例", errors)
 
 
+def check_boundary_evals(expected_skills: set[str], errors: list[str]) -> None:
+    path = SKILLS / "trigger-boundary-evals.json"
+    if not path.is_file():
+        fail("缺少独立触发边界留出集 skills/trigger-boundary-evals.json", errors)
+        return
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(rows, list) or not rows:
+        fail("独立触发边界留出集必须是非空数组", errors)
+        return
+    training = json.loads(TRIGGER_EVALS.read_text(encoding="utf-8"))
+    seen = {item.get("query") for item in training if isinstance(item, dict)}
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            fail(f"边界评测 #{index} 必须是对象", errors)
+            continue
+        query = row.get("query")
+        if not isinstance(query, str) or not query.strip() or query in seen:
+            fail(f"边界评测 #{index} query 为空、重复或与训练集重合", errors)
+        else:
+            seen.add(query)
+        skills = row.get("expected_skills")
+        if not isinstance(skills, list) or any(not isinstance(skill, str) or skill not in expected_skills for skill in skills):
+            fail(f"边界评测 #{index} expected_skills 必须引用已声明 Skill（可为空数组或多域）", errors)
+        elif len(skills) != len(set(skills)):
+            fail(f"边界评测 #{index} expected_skills 存在重复项", errors)
+        if not isinstance(row.get("reason"), str) or not row["reason"].strip():
+            fail(f"边界评测 #{index} 缺少 reason", errors)
+
+
 def main() -> int:
     binary = Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "feishu-cli").resolve()
     if not binary.exists():
@@ -337,8 +413,9 @@ def main() -> int:
     if nested:
         fail("发现嵌套 SKILL.md: " + ", ".join(str(p.relative_to(ROOT)) for p in nested), errors)
 
+    metadata = load_frontmatters([SKILLS / name / "SKILL.md" for name in sorted(expected)])
     for name in sorted(expected):
-        check_frontmatter(SKILLS / name, errors)
+        check_frontmatter(SKILLS / name, errors, metadata[str(SKILLS / name / "SKILL.md")])
 
     owners: list[tuple[str, str, tuple[str, ...]]] = []
     owned_workflows: set[tuple[str, str]] = set()
@@ -382,6 +459,7 @@ def main() -> int:
         )
     check_eval_coverage(expected, declared_workflows, errors)
     check_trigger_evals(manifest, declared_workflows, errors)
+    check_boundary_evals(expected, errors)
 
     excluded = [tuple(prefix) for prefix in manifest["excluded_command_prefixes"]]
     hidden_commands = [tuple(path) for path in manifest.get("hidden_commands", [])]
@@ -390,6 +468,10 @@ def main() -> int:
         if not runnable and children:
             fail(f"manifest hidden command 不是可执行命令: {' '.join(hidden)}", errors)
     leaves = sorted(set(collect_actionable_commands(binary)) | set(hidden_commands))
+    paths = {leaf[:length] for leaf in leaves for length in range(len(leaf) + 1)}
+    catalog = {path: parse_help(command_help(binary, path)) for path in paths}
+    example_errors, example_counts = check_examples(skill_markdown_files(), catalog, ROOT)
+    errors.extend(example_errors)
     covered = 0
     for leaf in leaves:
         if any(starts_with(leaf, prefix) for prefix in excluded):
@@ -415,10 +497,12 @@ def main() -> int:
         return 1
 
     print(
-        f"Skill 检查通过: {len(expected)} 个顶层 Skill，{len(declared_workflows)} 个工作流均有评测，"
+        f"Skill 结构检查通过: {len(expected)} 个顶层 Skill（真实 YAML 解析），{len(declared_workflows)} 个工作流均有评测，"
         f"29 个 legacy Skill 迁移映射完整，9 组触发评测各含 8 正例/8 近邻负例，"
         f"{covered} 个可执行业务命令全部唯一归属。"
     )
+    print(f"Skill 命令示例契约通过: {example_counts['checked']} 条长参数检查，{example_counts['skipped']} 条模板跳过（{example_counts['skip_reasons']}）。")
+    print("以上是结构/静态契约检查，不代表模型触发率或线上业务成功率；行为回归由 make check-skills 后续步骤单独执行。")
     return 0
 
 

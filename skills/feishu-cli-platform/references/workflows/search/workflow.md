@@ -6,7 +6,7 @@
 
 ## 执行流程
 
-每次执行搜索前，按以下流程操作：
+先选择本次身份：`search docs/apps` 必须 User；`search messages --as bot` 不依赖个人登录，确认应用已开通 scope 后直接搜索。以下登录预检仅适用于本地 User Token；完整规则见 [身份选择](../auth/references/identity.md)。
 
 ### 1. 预检 scope（推荐 AI Agent 使用）
 
@@ -43,7 +43,7 @@ feishu-cli auth login --scope "search:docs:read search:message" --json
 
 ### 3. 执行搜索
 
-登录后所有搜索命令自动从 `~/.feishu-cli/token.json` 读取 Token，无需手动传递。
+本地 User 模式自动从当前 profile 读取 Token；显式 `--as bot` 的消息搜索保持 Bot 身份。
 
 ---
 

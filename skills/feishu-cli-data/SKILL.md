@@ -3,15 +3,14 @@ name: feishu-cli-data
 description: >-
   仅用于普通电子表格 Sheet 与多维表格 Bitable/Base，不是所有数据或 JSON 请求的通用入口。
   用户要求读写单元格、
-  导入导出表格、设置样式/筛选视图/条件/下拉框/浮动图片，或操作多维表格的表、字段、记录、
+  导入导出表格、设置样式/筛选视图/条件/下拉框/原生单元格图片/浮动图片，或操作多维表格的表、字段、记录、
   视图、角色、协作者、仪表盘、表单、工作流和数据聚合时使用；也覆盖 --as bot 的 cron/无人值守
   Bitable 场景时必须使用本 Skill。明确禁止用于文档权限/协作者、消息/事件订阅和未封装
   OpenAPI 通用透传；它们分别使用 feishu-cli-storage、feishu-cli-messaging 和
   feishu-cli-platform。文档内 Markdown 表格使用 feishu-cli-docs；数据图表展示使用
   feishu-cli-visual。
-argument-hint: <sheet|bitable> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Read, Write
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Bash(jq:*) Read Write
 ---
 
 # 飞书表格与多维表格

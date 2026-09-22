@@ -2,7 +2,7 @@
 
 从本地 Markdown 文件创建飞书云文档，或把 Markdown 追加导入到已有文档。**支持 Mermaid/PlantUML 图表转飞书画板、大表格智能处理（行 > 9 单 block API 追加；列 > 9 拆分保留首列）**。
 
-> **Owner 规则**：创建新文档后如需交付给用户，先解析 `FEISHU_OWNER_EMAIL` 或配置文件 `owner_email`。只在解析到 owner 时授予 `full_access`；只在 `transfer_ownership=true` 时转移所有权。不要把示例邮箱当成真实接收人。
+> **Owner 规则**：创建后按 [新建文档授权流程](../write/workflow.md#新建文档) 处理用户指定接收人或当前生效的 owner 配置，沿用本次 profile/config；只在 `transfer_ownership=true` 时转移所有权。不要把示例邮箱当成真实接收人。
 
 ## 目录
 
@@ -28,7 +28,7 @@
 5. **表格列宽**：默认按内容启发式，可用紧邻表格上方注释 `<!-- feishu-colwidth: ... -->` 或 CLI flag `--table-column-width` 覆盖（注释优先级高于 flag）；仅 `doc import` / `doc add` 支持，`doc content-update` 会 fail-closed 报错；完整规则（单位/优先级/clamp/适用范围）以 `references/doc-guide.md` 表格章节为权威
 6. **API 限流自动重试**：画板创建和图表导入遇到 HTTP 429 时自动重试，读取服务端 `x-ogw-ratelimit-reset` 响应头精确计算退避时间，采用指数退避策略，默认最多重试 10 次
 7. **并发控制**：图表和表格分别使用独立的 worker 池（默认图表 5、表格 3 并发）
-8. **表格单元格图片真嵌入（#164）**：Markdown 表格单元格内的本地/网络图片，会在表格填充完成后（阶段 2.5）真正嵌入为单元格内的 Image 子块，而非丢失或退化为文字。细节：纯图片单元格不会把图片说明（alt）串成多余的标题文字；嵌入失败或单元格对不齐的图片计入统计 `cell_image_failed` 并打印，不静默丢弃；上传失败的空图块会被清理并补占位文本。仅 `doc import` 走真嵌入，`doc add/content-update` 等非导入场景的单元格图片降级为 `[图片: 说明]` 占位文本。JSON 输出新增 `cell_image_total/success/failed`
+8. **表格单元格图片真嵌入（#164）**：Markdown 表格单元格内的本地/网络图片，会在表格填充完成后（阶段 2.5）真正嵌入为单元格内的 Image 子块，而非丢失或退化为文字。细节：纯图片单元格不会把图片说明（alt）串成多余的标题文字；嵌入失败或单元格对不齐的图片计入统计 `cell_image_failed` 并打印，不静默丢弃；上传失败的空图块会被清理并补占位文本。仅 `doc import` 走这条真嵌入管线；`doc add` 的单元格图片降级为 `[图片: 说明]` 占位文本，`content-update` 则会拒绝本地图片路径。JSON 输出新增 `cell_image_total/success/failed`
 
 ## 核心概念
 
@@ -78,8 +78,8 @@ feishu-cli doc import ./document.md --title "带图文档" --upload-images
 3. **添加权限 / 转移所有权**（仅 owner 已配置时；`transfer_ownership=true` 才转移）
    owner 解析与 `perm add` / `perm transfer-owner` 完整流程以 `../write/workflow.md`「新建文档」一节为权威，此处不重复命令。
 
-4. **发送通知**
-   发送飞书消息通知用户文档已创建
+4. **交付结果**
+   在当前会话返回文档链接与导入统计。只有用户明确要求飞书通知，或已有适用的通知授权时，再按指定接收人发送消息。
 
 ### 追加导入到已有文档
 
@@ -90,7 +90,7 @@ feishu-cli doc import ./document.md --title "带图文档" --upload-images
    feishu-cli doc import <file.md> --document-id <doc_id> [--upload-images]
    ```
 
-2. **通知用户**
+2. **交付结果**：在当前会话返回追加结果；飞书通知遵循上面的授权条件。
 
 ## 参数说明
 
@@ -131,7 +131,7 @@ SVG 使用恰好三个反引号的 `svg` fence；导入器把 SVG 转为画板�
 - **引用块**（支持嵌套引用，自动转换为 QuoteContainer）
 - **Callout 高亮块**（`> [!NOTE]`、`> [!WARNING]` 等 6 种类型）
 - 分割线
-- **图片**（默认通过 `--upload-images` 自动上传本地和网络图片；无此参数时创建占位块。**表格单元格内的图片会真正嵌入为单元格内图片**，见核心特性 #164；与文字混排的内联图片统一转为 `[图片: 说明]` 占位，http(s) 为可点击链接）
+- **图片**（默认自动上传本地和网络图片；显式 `--upload-images=false` 时使用占位块。**表格单元格内的图片会真正嵌入为单元格内图片**，见核心特性 #164；与文字混排的内联图片统一转为 `[图片: 说明]` 占位，http(s) 为可点击链接）
 - **表格**（行 > 9 用 `insert_table_row` API 追加保持单 block；列 > 9 按列组拆分保留首列；**单元格内可放图片，导入后真正嵌入**）
 - 粗体、斜体、删除线、行内代码、**下划线**（`<u>文本</u>`）
 - 链接

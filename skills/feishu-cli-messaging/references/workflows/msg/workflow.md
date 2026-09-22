@@ -72,19 +72,19 @@
 
 ### 决策树（Claude 未指定类型时自动选择）
 
-**默认优先使用 `interactive`（卡片消息）**，样式美观、内容丰富、支持颜色/多列/按钮等。
+按内容和用户要求选择载体。需要结构化层级或操作入口时用 `interactive`；短回复、原文转达用 `text`，Markdown 排版用 `post`。
 
 ```
 用户需求
-├─ 【默认】通知/报告/告警/任何有信息量的消息 → interactive（卡片）
+├─ 有结构化字段、图表或真实操作入口的通知/报告/告警 → interactive（卡片）
 ├─ 发送已上传的图片/文件/音视频 → image/file/audio/media
 ├─ 分享群聊或用户名片 → share_chat/share_user
-└─ 仅以下场景才用 text/post：
-   ├─ 用户明确要求发纯文本 → text
-   └─ 用户明确要求发富文本 → post
+└─ 原文转达、简短回复或用户明确指定：
+   ├─ 简短纯文本 → text
+   └─ Markdown 或富文本 → post
 ```
 
-**为什么优先卡片**：text 不支持任何格式渲染，post 样式有限，卡片支持彩色 header、多列 fields、按钮、分割线、备注等，视觉效果远优于其他类型。
+卡片支持多列和交互，但不必为一句简短回复增加卡片设计步骤。用户已指定消息类型时沿用其要求。
 
 ### 消息类型一览
 
@@ -358,7 +358,9 @@ feishu-cli msg send \
 
 #### Interactive 卡片职责边界
 
-本技能只负责发送 interactive 消息，不负责设计卡片 JSON。
+本工作流负责发送 interactive 消息。完整 Card JSON 2.0 由 card 工作流构造并校验；
+`type=template` / `type=card` 是引用信封，不能把信封交给只接受完整 Card JSON 2.0 的 linter。
+引用信封需检查真实 template_id/card_id、模板变量和当前应用可用性，不应擅自重建已有卡片。
 
 - 结构化或美观卡片必须先按 [`card` 工作流](../card/workflow.md) 生成 v2 JSON（schema=2.0）。
 - 本技能发送：feishu-cli msg send --msg-type interactive --content-file <card.json>。
@@ -382,7 +384,7 @@ feishu-cli msg urgent om_xxx --user-id-type open_id --user-ids ou_xxx,ou_yyy
 
 ### 发送消息流程
 
-1. **确定接收者**：默认 `user@example.com`（email），或从上下文获取
+1. **确定接收者**：使用用户明确指定、当前上下文已确认或已授权配置中的真实接收者；缺少时先补齐。`user@example.com` 只是示例，不是默认收件人。
 2. **选择消息类型**：
    - 用户明确指定类型 → 使用指定类型
    - 结构化或美观通知 → 先按 [`card` 工作流](../card/workflow.md) 构造 JSON，再用 `interactive` 发送

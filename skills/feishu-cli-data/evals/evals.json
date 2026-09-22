@@ -5,9 +5,9 @@
       "id": 1,
       "workflows": ["bitable"],
       "prompt": "在 Bitable 表里创建一个单选字段“状态”，给我 --config JSON。不要多包一层 field。",
-      "expected_output": "field create 的 JSON 顶层直接是 name/type/property。",
-      "expectations": ["JSON 顶层包含 name、type、property", "JSON 不包含外层 field 对象"],
-      "files": []
+      "expected_output": "base/v3 field create 使用顶层 name/type/options，type 为 select，不能使用旧版 property 包装。",
+      "expectations": ["JSON 顶层包含 name、type、options，type 为 select", "options 是含 name 的对象数组", "JSON 不包含 field 或 property 包装对象"],
+      "files": ["evals/fixtures/select-field.json"]
     },
     {
       "id": 2,
@@ -23,6 +23,14 @@
       "prompt": "这个链接是 /base/bascnxxx，我想改记录并设筛选条件；应该走 sheet 还是 bitable，身份怎么固定成 bot？",
       "expected_output": "识别为 Bitable，使用 --base-token 与 --as bot。",
       "expectations": ["根据 /base/ 路由 Bitable 而非 Sheet", "命令包含 --base-token 和 --as bot"],
+      "files": []
+    },
+    {
+      "id": 4,
+      "workflows": ["sheet"],
+      "prompt": "我只想读普通 Sheet shtcnxxx 的 0b1212 工作表 A1:C10，再把 B2 改成 42。请给出命令；这是否还归当前表格 Skill，需不需要切换其他 Skill？",
+      "expected_output": "继续使用本 Skill 的基础 Sheet 工作流，分别生成范围读取和写入命令。",
+      "expectations": ["使用 sheet read shtcnxxx 0b1212!A1:C10", "写入使用 sheet write shtcnxxx 0b1212!B2 --data '[[42]]' 或等效 JSON", "不因是基础命令而拒绝当前 Skill 或改用 Bitable"],
       "files": []
     }
   ]

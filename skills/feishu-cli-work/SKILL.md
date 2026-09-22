@@ -7,9 +7,9 @@ description: >-
   明确禁止用于用户/部门通讯录、邮箱、历史会议检索、会议录制或妙记；它们分别使用
   feishu-cli-platform、feishu-cli-mail 和 feishu-cli-meetings。会议通知消息使用
   feishu-cli-messaging。
-argument-hint: <calendar|task|tasklist|approval|attendance|okr> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Read, Write
+  明确查询 schema 或调用未封装 raw OpenAPI 使用 feishu-cli-platform。
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Bash(jq:*) Read Write
 ---
 
 # 飞书工作管理
@@ -31,5 +31,5 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Read, Write
 
 1. 创建、修改、删除、审批通过/拒绝等操作会影响他人，执行前展示目标和关键参数。
 2. `task my`、`task search`、**全部**审批命令（`approval get` / `instance get|initiated|create|cancel|cc` / `task query|approve|reject|transfer`）和 `calendar rsvp` 必须使用 User Token；其他命令按各工作流说明选择身份。
-3. 时间统一使用带时区的 RFC3339；不要把全天事件和具体时段混用。
+3. 时间格式以命令帮助为准：日历时间点优先带时区的 RFC3339，考勤日期用 `YYYY-MM-DD` / `YYYYMMDD`；不要把全天事件和具体时段混用。
 4. 任务清单添加/移除任务使用 `task-add` / `task-remove`，不存在 `add-task` / `remove-task`。

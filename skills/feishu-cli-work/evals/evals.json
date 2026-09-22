@@ -3,42 +3,99 @@
   "evals": [
     {
       "id": 1,
-      "workflows": ["calendar"],
+      "workflows": [
+        "calendar"
+      ],
       "prompt": "列出明天待我答复的日程并逐个接受。agenda JSON 应该过滤哪个字段？",
       "expected_output": "过滤 self_rsvp_status=needs_action，再使用 calendar rsvp 和 User Token。",
-      "expectations": ["jq 过滤 self_rsvp_status 而不是 status", "使用 calendar rsvp 并说明 User Token", "只查明天时 start-date 与 end-date 都使用明天日期"],
+      "expectations": [
+        "jq 过滤 self_rsvp_status 而不是 status",
+        "使用 calendar rsvp 并说明 User Token",
+        "只查明天时 start-date 与 end-date 都使用明天日期"
+      ],
       "files": []
     },
     {
       "id": 2,
-      "workflows": ["task"],
+      "workflows": [
+        "task"
+      ],
       "prompt": "把 task_guid 加入 tasklist_guid，之后再移除。请给准确子命令名。",
       "expected_output": "使用 tasklist task-add 与 task-remove，不使用 add-task/remove-task。",
-      "expectations": ["添加命令是 tasklist task-add", "移除命令是 tasklist task-remove"],
+      "expectations": [
+        "添加命令是 tasklist task-add",
+        "移除命令是 tasklist task-remove"
+      ],
       "files": []
     },
     {
       "id": 3,
-      "workflows": ["approval"],
+      "workflows": [
+        "approval"
+      ],
       "prompt": "发起审批时我要给 n1 指定审批人、给 n2 指定抄送人。先查定义，再给 instance create 参数。",
       "expected_output": "使用 approval get 和 instance create 的 node-approver/node-cc 参数或文件。",
-      "expectations": ["查询定义使用 approval get", "instance create 使用 node-approver 与 node-cc 参数或文件"],
+      "expectations": [
+        "查询定义使用 approval get",
+        "instance create 使用 node-approver 与 node-cc 参数或文件"
+      ],
       "files": []
     },
     {
       "id": 4,
-      "workflows": ["attendance"],
+      "workflows": [
+        "attendance"
+      ],
       "prompt": "查询 28470001,28470002 在 2026-07-01 到 2026-07-07 的打卡记录，包含加班班段并输出 JSON。单次最多能查多少人？",
       "expected_output": "使用 attendance user-task query，支持 User/Tenant Token，并说明 50 人上限。",
-      "expectations": ["命令使用 attendance user-task query 和 --employee-type employee_id", "命令包含 --user-ids 28470001,28470002、日期范围、--need-overtime 和 --output json", "支持 User/Tenant Token", "明确 user-task 单次最多 50 人"],
+      "expectations": [
+        "命令使用 attendance user-task query 和 --employee-type employee_id",
+        "命令包含 --user-ids 28470001,28470002、日期范围、--need-overtime 和 --output json",
+        "支持 User/Tenant Token",
+        "明确 user-task 单次最多 50 人"
+      ],
       "files": []
     },
     {
       "id": 5,
-      "workflows": ["okr"],
+      "workflows": [
+        "okr"
+      ],
       "prompt": "给 KR 7123456789012345678 上报 80% 的正常进展“完成 8/10 任务”，并关联周报 https://www.feishu.cn/docx/doxcnxxx。说明身份要求和 progress-status 的约束。",
       "expected_output": "使用 Tenant Token 创建 KR 进展，percent 与 status 配套，并显式提供 source URL。",
-      "expectations": ["命令使用 okr progress create --key-result-id 7123456789012345678", "命令包含 --content、--progress-percent 80、--progress-status normal 和 --source-url", "明确 OKR 使用 Tenant Token 且不需要 auth login", "明确 --progress-status 必须与 --progress-percent 一起使用"],
+      "expectations": [
+        "命令使用 okr progress create --key-result-id 7123456789012345678",
+        "命令包含 --content、--progress-percent 80、--progress-status normal 和 --source-url",
+        "明确 OKR 使用 Tenant Token 且不需要 auth login",
+        "明确 --progress-status 必须与 --progress-percent 一起使用"
+      ],
+      "files": []
+    },
+    {
+      "id": 6,
+      "workflows": [
+        "attendance"
+      ],
+      "prompt": "查询两名员工2026年9月1日至2日的打卡，日期是否应该统一写成2026-09-01T00:00:00+08:00？",
+      "expected_output": "考勤只使用YYYY-MM-DD或YYYYMMDD，不能套用日历时间点的RFC3339。",
+      "expectations": [
+        "日期使用2026-09-01和2026-09-02",
+        "说明考勤不接受RFC3339时间点"
+      ],
+      "files": []
+    },
+    {
+      "id": 7,
+      "workflows": [
+        "calendar"
+      ],
+      "prompt": "给已有日程加入Bot与同事，calendar_id和event_id都已确认。请给calendar attendee add的准确参数形状，不实际执行。",
+      "expected_output": "两个ID均为位置参数，用户列表用--user-ids。",
+      "expectations": [
+        "使用calendar attendee add <calendar_id> <event_id> --user-ids",
+        "不使用不存在的--calendar-id或--event-id",
+        "不执行真实写操作"
+      ],
       "files": []
     }
   ]

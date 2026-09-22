@@ -329,9 +329,11 @@ feishu-cli drive add-comment \
 # drive import 走临时媒体（不污染云盘）
 feishu-cli drive import --file report.docx --type docx --folder-token fldxxx
 
-# 20MB 以上表格文件请导入为 bitable（上限 100MB）
-feishu-cli drive import --file big_sheet.xlsx --type bitable --folder-token fldxxx
+# XLSX 超过 20MB 自动分片，仍可保留普通 Sheet 类型（上限 800MB）
+feishu-cli drive import --file big_sheet.xlsx --type sheet --folder-token fldxxx
 ```
+
+不要仅因文件超过 20MB 就改成 Bitable；目标类型以用户需求为准。CSV 的上限另计：Sheet 20MB、Bitable 100MB；更大的 CSV 若需保留 Sheet，应先转换为 XLSX。完整格式矩阵见上方「文档导入」。
 
 ### 工作流 F：申请文档权限（apply-permission）
 
