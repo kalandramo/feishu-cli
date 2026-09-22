@@ -4,6 +4,14 @@
 
 版本格式：[MAJOR.MINOR.PATCH](https://semver.org/lang/zh-CN/)
 
+## [Unreleased]
+
+### 新增
+
+- `sheet image write-batch`：新增原生单元格图片批量写入命令，支持通过 manifest（文件、stdin `-` 或行内 JSON）并发写入并经由 V3 `read-rich` 回读校验，内置连接池复用与全抖动限流重试。
+- `sheet image write-image`：升级单格图片写入命令，支持直接传入 HTTPS 网络图片 URL 与 `-o json` 输出，写入后自动通过 V3 `read-rich` 回读验证原生 `image_token`。强化范围校验，若传入的范围前缀与目标 `sheet_id` 不一致时实行 fail-fast 拦截报错（原先为静默尊重前缀但会导致回读验证失配）。
+- `skills/feishu-cli-data`：更新技能说明与表格工作流规范，明确单元格原生图片写入规则，严禁使用 `=IMAGE(...)` 公式或 Markdown 图片语法替代。
+
 ## [v1.40.0] - 2026-08-28
 
 ### 修复 — 深度 review：数据破坏、功能失效与静默降级（23 项）

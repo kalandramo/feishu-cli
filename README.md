@@ -975,7 +975,8 @@ feishu-cli sheet dropdown get --token shtcnxxxx --range "SHEET_ID!A1:A100"
 feishu-cli sheet dropdown delete --token shtcnxxxx --ranges "SHEET_ID!A1:A100"
 # 浮动图片 / 单元格写图 / 批量样式
 feishu-cli sheet image media-upload shtcnxxxx ./logo.png                     # 返回 file_token
-feishu-cli sheet image write-image shtcnxxxx SHEET_ID --range "A1" --image ./logo.png
+feishu-cli sheet image write-image shtcnxxxx SHEET_ID --range "A1" --image https://example.com/logo.png  # 支持 HTTPS URL / 本地路径并回读校验
+feishu-cli sheet image write-batch shtcnxxxx SHEET_ID --manifest images.json # 批量写入并回读校验（支持文件、stdin '-' 或行内 JSON）
 feishu-cli sheet batch-set-style shtcnxxxx \
   --data '[{"ranges":["SHEET_ID!A1:A2"],"style":{"font":{"bold":true},"backColor":"#FF0000"}}]'
 

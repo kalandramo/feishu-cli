@@ -43,7 +43,7 @@ func TestSheetImageUpdateFlags(t *testing.T) {
 
 // TestSheetImageWriteFlags write-image flag 注册
 func TestSheetImageWriteFlags(t *testing.T) {
-	for _, n := range []string{"range", "image", "name"} {
+	for _, n := range []string{"range", "image", "name", "allow-private-net", "output", "user-access-token"} {
 		if sheetImageWriteCmd.Flags().Lookup(n) == nil {
 			t.Errorf("--%s missing on write-image", n)
 		}
@@ -62,7 +62,9 @@ func TestNormalizeSheetWriteImageRange(t *testing.T) {
 		{"无前缀单格", "A1", "0b1212", "0b1212!A1:A1", false},
 		{"带前缀单格", "0b1212!B2", "0b1212", "0b1212!B2:B2", false},
 		{"带前缀且 cell:cell", "0b1212!C3:C3", "0b1212", "0b1212!C3:C3", false},
-		{"前缀与传入 sheetID 不同时尊重前缀", "abc!E5", "0b1212", "abc!E5:E5", false},
+		{"带单引号前缀", "'0b1212'!C3:C3", "0b1212", "0b1212!C3:C3", false},
+		{"前缀与传入 sheetID 不同时报错", "abc!E5", "0b1212", "", true},
+		{"大小写不敏感", "a1:A1", "0b1212", "0b1212!A1:A1", false},
 		{"同列多行报错", "0b1212!D4:D9", "0b1212", "", true},
 		{"同行多列报错", "0b1212!A1:B1", "0b1212", "", true},
 		{"无前缀多格报错", "A1:A2", "0b1212", "", true},
