@@ -32,3 +32,4 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Read, Write
 2. Sheet 使用 spreadsheet token + sheet ID；Bitable 统一使用 `--base-token`，身份通过 `--as bot|user|auto` 控制。
 3. 写操作先用 `--dry-run`（命令支持时），批量操作先用少量记录验证字段类型。
 4. 不要把 Bitable field create 的 body 额外包进 `field` 对象；直接使用命令帮助要求的字段 JSON。
+5. Sheet 写入单元格图片规则：单个图片使用 `sheet image write-image <spreadsheet_token> <sheet_id> --range <cell> --image <path|url>`；批量图片统一使用 `sheet image write-batch <spreadsheet_token> <sheet_id> --manifest <file|-|json>`。严禁用 V2 `sheet write` 写 `=IMAGE(...)` 字符串公式，也严禁在 `sheet import-md` 中使用 Markdown 图片语法 `![]()`，两者均无法生成可渲染的原生图片单元格。命令统一支持本地路径与 HTTPS URL，写入原生图片单元格后均自动通过 V3 `read-rich` 回读验证 `image_token`。
