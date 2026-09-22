@@ -81,7 +81,7 @@ feishu-cli okr cycle list --output json
 ```
 
 **输出字段**：
-- `id` — 周期 ID（后续创建 O/KR 时会用，本技能不涉及）
+- `id` — 周期 ID（用于 cycle detail，以及后文创建 O/KR 的 api 配方）
 - `zh_name` / `en_name` — 周期名称（如 "2026-Q1"）
 - `start_time` / `end_time` — 周期起止时间
 - `cycle_status` — 周期状态官方 wire：`default`(0) / `normal`(1) / `invalid`(2) / `hidden`(3)
@@ -228,7 +228,9 @@ CLI 已公开完整的进展 CRUD 与配套命令（见「命令速查」）：`
 | `progress delete` | `okr:okr` 或 `okr:okr.progress:delete` |
 | `upload-image` | `okr:okr` 或 `okr:okr.progress.file:upload` |
 
-这些是应用权限，不是 OAuth 用户授权；用开放平台应用权限管理页面开通。
+默认 Bot 路线在应用权限管理页面开通上述 tenant scopes。选择 `--as user` 的端点，
+还需对应的用户 scope 和 OAuth 授权；按服务端返回的 scope 提示预检、增量登录。
+`cycle list` 只收 Tenant Token，不应用用户授权替代。
 
 ## 典型工作流
 
@@ -326,4 +328,4 @@ feishu-cli api PATCH /open-apis/okr/v2/indicators/<indicator_id> --as user --dat
 
 - **feishu-cli-platform** — 通用认证诊断；OKR scopes 需要在开放平台应用权限管理开通
 - **feishu-cli-messaging** — 发飞书消息（进展同步后通知 leader/小组）
-- **feishu-cli-work** — 综合工具箱（任务、日历等其他周报相关工具）
+- 本领域的 task / calendar 工作流 — 任务、日历等其他周报相关操作

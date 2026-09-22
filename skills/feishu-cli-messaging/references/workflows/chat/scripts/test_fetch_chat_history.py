@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import os
+import contextlib
+import io
+import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -92,6 +96,85 @@ class ResolveUserInfoTests(unittest.TestCase):
             "/path/feishu-cli",
             ["user", "info", "ou_xxx", "-o", "json"],
         )
+
+
+
+class FetchIntegrityTests(unittest.TestCase):
+    def history(self, responses):
+        with mock.patch.object(fetch_chat_history, "run_cli_json", side_effect=responses), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return fetch_chat_history.fetch_history("cli", "oc_test", "chat", 1, 2, None)
+
+    def test_cli_failure_is_not_empty_history(self):
+        result = subprocess.CompletedProcess([], 1, "", "读取接口失败")
+        with mock.patch.object(fetch_chat_history.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(fetch_chat_history.FetchError, "读取接口失败"):
+                fetch_chat_history.run_cli_json("cli", ["msg", "history"])
+
+    def test_invalid_json_fails(self):
+        result = subprocess.CompletedProcess([], 0, "not json", "")
+        with mock.patch.object(fetch_chat_history.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(fetch_chat_history.FetchError, "JSON"):
+                fetch_chat_history.run_cli_json("cli", ["msg", "history"])
+
+    def test_mid_pagination_failure_propagates(self):
+        with self.assertRaisesRegex(fetch_chat_history.FetchError, "读取失败"):
+            self.history([{"items": [{"message_id": "a"}], "has_more": True, "page_token": "next"},
+                          fetch_chat_history.FetchError("读取失败")])
+
+    def test_empty_and_repeated_cursors_fail(self):
+        for token in ("", "same"):
+            with self.subTest(token=token), self.assertRaisesRegex(fetch_chat_history.FetchError, "游标"):
+                self.history([{"items": [], "has_more": True, "page_token": token}] * 2)
+
+    def test_page_cap_is_not_success(self):
+        with mock.patch.object(fetch_chat_history, "MAX_HISTORY_PAGES", 1):
+            with self.assertRaisesRegex(fetch_chat_history.FetchError, "页上限"):
+                self.history([{"items": [], "has_more": True, "page_token": "next"}])
+
+    def test_overlapping_pages_deduplicate(self):
+        items, names = self.history([
+            {"items": [{"message_id": "a"}], "has_more": True, "page_token": "next"},
+            {"items": [{"message_id": "a"}, {"message_id": "b"}], "has_more": False},
+        ])
+        self.assertEqual([x["message_id"] for x in items], ["a", "b"])
+
+    def test_thread_pagination_checks_and_pascal_case(self):
+        page = {"Items": [{"message_id": "a"}], "HasMore": True, "PageToken": "same"}
+        with mock.patch.object(fetch_chat_history, "run_cli_json", return_value=page):
+            with self.assertRaisesRegex(fetch_chat_history.FetchError, "游标"):
+                fetch_chat_history.fetch_thread("cli", "omt_test", None)
+        with mock.patch.object(fetch_chat_history, "MAX_THREAD_PAGES", 1), \
+                mock.patch.object(fetch_chat_history, "run_cli_json", return_value=page):
+            with self.assertRaisesRegex(fetch_chat_history.FetchError, "页上限"):
+                fetch_chat_history.fetch_thread("cli", "omt_test", None)
+        with mock.patch.object(fetch_chat_history, "run_cli_json", return_value={"Items": [], "HasMore": False}):
+            self.assertEqual(fetch_chat_history.fetch_thread("cli", "omt_test", None), ([], {}))
+
+    def test_error_envelope_cannot_be_an_empty_page(self):
+        with self.assertRaisesRegex(fetch_chat_history.FetchError, "缺少 items"):
+            self.history([{"code": 999}])
+
+    def test_optional_name_failure_still_degrades(self):
+        with mock.patch.object(fetch_chat_history, "run_cli_json", side_effect=fetch_chat_history.FetchError("41050")):
+            self.assertEqual(fetch_chat_history.resolve_with_user_info("cli", ["ou_test"], None), {})
+
+    def test_export_preserves_known_bot_names(self):
+        items = [{"message_id": "m1", "create_time": "1", "msg_type": "text",
+                  "sender": {"id_type": "app_id", "id": "cli_a"}, "body": {"content": '{"text":"hello"}'}},
+                 {"message_id": "m2", "create_time": "2", "msg_type": "text",
+                  "sender": {"id_type": "app_id", "id": "cli_b"}, "body": {"content": '{"text":"world"}'}}]
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(sys, "argv", ["fetch", "oc_test", "--cli", "cli", "--no-thread", "--output-dir", tmp]), \
+                mock.patch.object(fetch_chat_history, "run_cli_json", return_value={
+                    "items": items, "sender_names": {"cli_a": "Build bot", "cli_b": "Alert bot"}}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(fetch_chat_history.main(), 0)
+            names = json.loads((Path(tmp) / "names.json").read_text())
+            self.assertEqual(names, {"cli_a": "Build bot", "cli_b": "Alert bot"})
+            timeline = (Path(tmp) / "timeline.txt").read_text()
+            self.assertIn("Build bot", timeline)
+            self.assertIn("Alert bot", timeline)
 
 
 if __name__ == "__main__":

@@ -323,7 +323,7 @@ feishu-cli doc import ./design.md --title "设计稿" --upload-images
 | `--content-file` 是目录 | `--content-file 必须指向文件，不是目录` | 指向具体 `.md` 文件 |
 | 既给 `--content` 又给 `--content-file` | `--content 与 --content-file 不能同时使用` | 二选一 |
 | 都没给 | `请提供 --content 或 --content-file` | 至少传一个 |
-| `--content` 模式漏 `--name` 且远端 title 为空 | 回退 `<fileToken>.md` | 想保留原名可显式 `--name existing.md` |
+| 未传 `--name` 且读不到远端现有文件名 | 拒绝以 `<fileToken>.md` 静默重命名，非零退出且不上传 | 确认远端文件名后显式传 `--name existing.md`，或先解决元数据读取失败 |
 | 内容为空字节 | `Markdown 内容为空，不支持把 .md 覆盖为空文件` | 要清空语义传 `--content " "`（占位空格） |
 | HTTP 层异常 | `覆盖文件失败: HTTP <status>, body: <raw>` | 网络/代理问题，附带原始 body 便于排查 |
 | 响应解析失败 | `解析覆盖响应失败: <json error>` | 飞书侧返回非 JSON（极罕见，通常网关错误页） |
@@ -336,9 +336,9 @@ feishu-cli doc import ./design.md --title "设计稿" --upload-images
 |---|---|---|
 | `drive upload --file x.md` | `markdown create --content-file x.md` | markdown 强制 `.md` 后缀 + 空内容校验 + AI agent 友好 |
 | `drive download --file-token xxx` | `markdown fetch --file-token xxx` | markdown 默认打印 stdout（文本场景）+ 目录路径自动拼 `.md` |
-| 无 | `markdown overwrite` | 老命令没有覆盖语义（只能"删了重建"，file_token 变化） |
+| `drive upload --file x.md --file-token <token>` | `markdown overwrite` | 两者都保留 file_token；drive 覆盖限 ≤20MB，markdown 覆盖支持 >20MB 分片并在省略 --name 时保留远端文件名 |
 
-**老 `drive upload/download` 仍然可用**（二进制、非 `.md` 走老路径），新能力集中在 `markdown overwrite`（保 file_token 覆盖）。
+`drive upload/download` 适合二进制与非 `.md` 文件；原生 Markdown 的读取、比较、查找替换与大文件覆盖使用 `markdown` 命令组。
 
 ## 官方协议要点
 

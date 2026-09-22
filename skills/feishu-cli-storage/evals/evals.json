@@ -40,6 +40,14 @@
       "expected_output": "使用 comment list、resolve 和 reply delete，并明确不支持删除整条评论。",
       "expectations": ["使用 comment list doxcnxxx --type docx", "使用 comment resolve doxcnxxx com_xxx --type docx", "使用 comment reply delete doxcnxxx com_xxx rep_xxx --type docx", "明确飞书不支持直接删除整条评论"],
       "files": []
+    },
+    {
+      "id": 6,
+      "workflows": ["drive"],
+      "prompt": "big_sheet.xlsx 是 21MiB，要导入成普通 Sheet 并保留这个目标类型。先用 Bot 身份输出 dry-run 计划，不能改成 Bitable。",
+      "expected_output": "drive import --type sheet --as bot --dry-run，超过20MB只改变上传方式。",
+      "expectations": ["命令使用 drive import --file big_sheet.xlsx --type sheet --as bot --dry-run", "说明 XLSX 的800MB上限与CSV的Sheet 20MB/Bitable 100MB上限不同", "计划先分片上传再创建 type=sheet 的导入任务，不改为 Bitable"],
+      "files": []
     }
   ]
 }

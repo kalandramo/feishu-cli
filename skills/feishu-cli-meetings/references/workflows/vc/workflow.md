@@ -15,9 +15,9 @@
 
 ## 前置条件
 
-- **认证**：除 `vc bot meeting-join/meeting-leave`（默认 Bot/Tenant 身份，仅靠 App ID + App Secret）外，`vc search/notes/recording/detail`、`vc note` 与 minutes 全部命令均需 **User Access Token**。`vc bot meeting-events` 用显式 `--as bot|user|auto`（默认 auto），身份必须与 `meeting_id` 来源一致。推荐先 `auth check --scope "..."`；完整身份清单以「注意事项」的「Token 身份分三档」为唯一权威
+- **认证**：除 `vc bot meeting-join/meeting-leave`（默认 Bot/Tenant 身份，仅靠 App ID + App Secret）外，`vc search/notes/recording/detail`、`vc note` 与 minutes 全部命令均需 **User Access Token**。`vc bot meeting-events` 用显式 `--as bot|user|auto`（默认 auto），身份必须与 `meeting_id` 来源一致。本地 User 路径先 `auth check --scope "..."`，Bot 路径确认应用权限，不能以 User 登录作为前提；通用规则见 `feishu-cli-platform` 的 auth 身份参考，下文补充会议特有约束
 - **App 凭证**：应用 App ID + App Secret（环境变量 `FEISHU_APP_ID` + `FEISHU_APP_SECRET` 或 `~/.feishu-cli/config.yaml`）
-- **预检**：`feishu-cli auth status` 查看登录状态；`feishu-cli auth check --scope "vc:meeting.search:read"` 预检 scope
+- **User 搜索预检**：使用本地登录身份执行 `vc search` 前，可用 `feishu-cli auth status` 查看状态、`feishu-cli auth check --scope "vc:meeting.search:read"` 检查 scope。Bot 入会或查询事件不要求这个 User scope。
 
 ## 命令速查
 
@@ -125,7 +125,7 @@ feishu-cli vc bot meeting-events --meeting-id 6911188411932033028 --start 2026-0
 | `meeting-events` | `GET /open-apis/vc/v1/bots/events` | `--as bot\|user\|auto`（默认 auto） | `--meeting-id`（必填）、`--as`、`--start`、`--end`、`--page-size`（20-100，默认 20）、`--page-token`、`--dry-run`、`-o json` |
 
 > 三个子命令均支持 `--dry-run`（只打印将要发送的请求参数/请求体，不实际调用）与 `-o json`（输出原始响应）。
-> 身份细节（`meeting-join/leave` 默认 Bot/Tenant 且仅认 `--user-access-token` flag、`meeting-events` 必须显式 `--as`；实调 auto fail-closed，dry-run 静态探测不联网）见「注意事项」的「Token 身份分三档」。
+> 身份细节（`meeting-join/leave` 默认 Bot/Tenant 且仅认 `--user-access-token` flag、`meeting-events` 建议按来源显式选择 `--as`；实调 auto fail-closed，dry-run 静态探测不联网）见「注意事项」的「Token 身份分三档」。
 > `meeting-events` 的 `--page-size` 取值范围是 **20-100**（与 `vc search` 的 1-30 不同）；传 0 或不传走默认 20，传 1-19 会被拒。
 
 ### 7. 聚合会议详情 → note_id + minute_token（vc detail）
@@ -298,7 +298,7 @@ feishu-cli minutes download --minute-tokens <minute_token> --output ./media
 | `vc recording` | `vc:record:readonly`（calendar 路径同上追加日历权限） |
 | `vc bot meeting-join` | `vc:meeting.bot.join:write` |
 | `vc bot meeting-leave` | `vc:meeting.bot.join:write`（与入会同一 scope） |
-| `vc bot meeting-events` | User：`vc:meeting.meetingevent:read`；Bot：`vc:meeting.bot.join:write`。必须 `--as bot\|user\|auto`，禁止静默回落 |
+| `vc bot meeting-events` | User：`vc:meeting.meetingevent:read`；Bot：`vc:meeting.bot.join:write`。支持 `--as bot\|user\|auto`；已配置 User 不可用时不能静默回落 |
 | `vc detail`（meeting_id 路径） | `vc:meeting.meetingevent:read`、`vc:record:readonly` |
 | `vc detail`（会议号路径） | + `vc:meeting:readonly` 或 `vc:meeting.meetingid:read`（`list_by_no` 反查所需） |
 | `minutes get` | `minutes:minutes:readonly`（`--with-artifacts` 额外需 `minutes:minutes.artifacts:read`） |
@@ -306,7 +306,7 @@ feishu-cli minutes download --minute-tokens <minute_token> --output ./media
 | `minutes apply-permission` | `minutes:permission:apply` |
 | `minutes download` | `minutes:minutes.media:export` |
 
-权限在飞书开放平台的应用权限管理页面开通；开通后执行 `feishu-cli auth login --scope "所需 scope..."` 或 `feishu-cli auth login --domain vc --domain minutes --recommend` 重新授权即可。
+Bot 权限在飞书开放平台的应用权限管理页面开通；User 路径还需执行 `feishu-cli auth login --scope "所需 scope..."` 或 `feishu-cli auth login --domain vc --domain minutes --recommend` 重新授权即可。
 
 ## 注意事项
 

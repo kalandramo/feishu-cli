@@ -1071,6 +1071,17 @@ feishu-cli auth token --as user                                              # �
 | `feishu-cli-mail` | 飞书邮箱读取、草稿、发送、回复和转发 | "回复这封飞书邮件" |
 | `feishu-cli-meetings` | 视频会议、妙记、录制、逐字稿和会议机器人 | "下载会议纪要" |
 
+Skill 入口使用 Agent Skills 标准 frontmatter；按需加载的工作流和脚本随目录一起分发。
+本版本技能与 `feishu-cli v1.41.0+` 配套使用；聊天导出脚本需要 Python 3.10+，
+可视化工作流按需使用 Node.js、whiteboard-cli 或 agent-browser，具体依赖见对应入口的 `compatibility`。
+各宿主对工具授权字段的解释可能不同，不能把 `allowed-tools` 当作跨宿主的执行保证。
+
+维护时从仓库根运行 `make check-skills`。它会重新编译 CLI，检查 YAML 元数据、引用、
+命令归属和示例参数，再执行脚本回归与本地模拟 API 的二进制契约测试。
+这些检查不等同于线上 API 验证或模型触发评测；后两者需要分别执行并记录模型、身份和实际结果。
+`skills/trigger-evals.json` 保留各领域的 8 个正例，`scripts/build_trigger_eval_set.py`
+为每个领域生成 8 正例加 8 个相邻领域负例；`skills/trigger-boundary-evals.json` 另存跨领域和不应触发的场景。
+
 <details>
 <summary>旧 Skill 名称迁移对照（v1.35 前的 29 个技能 → 9 个领域）</summary>
 

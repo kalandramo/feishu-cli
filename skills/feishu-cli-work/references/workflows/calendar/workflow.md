@@ -184,7 +184,7 @@ feishu-cli calendar room-find \
   -o json | jq '.time_slots[0].meeting_rooms[0]'
 # 假设拿到 room_id=omm_xxx
 
-# 3. 创建日程并邀请参与人 + 会议室（走 toolkit）
+# 3. 创建日程，随后按本工作流添加参与人和会议室
 feishu-cli calendar create-event \
   --calendar-id <主日历> \
   --summary "三方对齐" \
@@ -267,7 +267,7 @@ Bot 身份建的日程 **Bot 自己不在参会人列表里**（用户身份建�
 
 ```bash
 BOT_ID=$(feishu-cli api GET /open-apis/bot/v3/info --as bot --jq '.bot.open_id' | tr -d '"')
-feishu-cli calendar attendee add --calendar-id <cal_id> --event-id <event_id> --user-ids "$BOT_ID,ou_其他人"
+feishu-cli calendar attendee add <cal_id> <event_id> --user-ids "$BOT_ID,ou_其他人"
 ```
 
 另注：搜索用户接口（`user read --query`）不支持 Bot 身份，需 User Token。

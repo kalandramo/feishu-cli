@@ -9,11 +9,10 @@ description: >-
   部门时必须使用本 Skill。明确禁止用于文档正文、云盘文件、消息/群聊、Sheet/Bitable、
   画板/展示、日历/任务/审批/考勤/OKR、邮箱或会议/妙记；这些业务操作交给对应领域 Skill。
   这里的“全局搜索”仅指 `search docs/messages/apps`，不包括在审批、会议、邮箱等业务域内查询。
-  请求出现 approval、approval_code、审批定义/实例/待办时绝对不要使用本 Skill，应使用
-  feishu-cli-work；出现视频会议、妙记、minute、录制或逐字稿时应使用 feishu-cli-meetings。
-argument-hint: <auth|config|profile|api|schema|search|user|dept> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Bash(curl:*), Bash(python3:*), Read, Write
+  业务审批定义/实例/待办使用 feishu-cli-work，会议/妙记业务使用 feishu-cli-meetings。
+  但明确查询 schema 或调用未封装 raw OpenAPI 时仍使用本 Skill，即使端点属于 approval/vc。
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Bash(jq:*) Bash(curl:*) Bash(python3:*) Read Write
 ---
 
 # 飞书平台能力
@@ -32,14 +31,16 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Bash(curl:*
 | 搜索文档、消息或应用 | `references/workflows/search/workflow.md` |
 | 查询用户、邮箱、手机号、部门 | `references/workflows/directory/workflow.md` |
 
+涉及身份选择时读取 `references/workflows/auth/references/identity.md`；`auth check` 不是 Bot 权限检查。
+
 Schema 只负责发现接口；API 负责执行请求。通常先查 schema，再调用 api。
 
 ## 执行规则
 
-1. 优先运行仓库当前编译产物 `./feishu-cli`；安装环境才使用 PATH 中的 `feishu-cli`。
-2. User Token 操作先执行 `auth check --scope`。不要在输出、文件或命令历史中暴露真实 Token。
-3. 多 Bot / 不确定当前是哪个应用时，先 `profile list --json`；单次目录/Token 选择用 `--profile <name>`，不要为一条命令去 `profile use`。若 `env_overrides.app_id/app_secret=true`，环境变量仍覆盖 App 凭证，需先提示用户 unset 对应变量。
-4. 写请求先用 `--dry-run`；API 不支持 dry-run 的端点需明确告知用户副作用。
+1. 仓库开发优先使用刚编译的 `bin/feishu-cli`（`make build`）或 `./feishu-cli`；安装环境使用 PATH 中的 `feishu-cli`。
+2. 先确定执行身份。`auth check --scope` 只检查当前 profile 的本地 User Token，不能验证 Bot 权限或显式 Token；Bot 的权限看应用配置和实际接口结果。不要回显真实 Token。
+3. 多 Bot / 不确定当前应用时先 `profile list --json`；单次用 `--profile <name>`，不改默认指针。环境变量覆盖了目标 App 时，沿用已有授权在本次进程移除对应覆盖，或用 `--bot-app-id/--bot-app-secret` 指定正确凭证，不修改用户全局环境。
+4. `api` 的所有写请求均可先用 CLI 本地 `--dry-run` 预览；预览不代表服务端接受。其他命令按各自帮助选择验证方式。
 5. 搜索与通讯录结果默认只读取；用户要求后续写操作时再切换到对应领域 Skill。
 
 ## 领域边界

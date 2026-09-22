@@ -6,11 +6,9 @@ description: >-
   大文件分块或断点续传、异步任务、目录镜像、知识库、wiki、素材、评论、共享权限、
   协作者、公开链接、分享密码、转移所有权或权限申请时必须使用本 Skill。
   Wiki 仅在管理空间、节点结构或成员时属于本 Skill；明确禁止用它读取或总结 Wiki/文档正文，
-  正文内容使用 feishu-cli-docs。会议录制、妙记和逐字稿使用 feishu-cli-meetings；搜索使用
-  feishu-cli-platform。
-argument-hint: <drive|file|media|wiki|comment|perm> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Bash(python3:*), Read, Write
+  正文内容使用 feishu-cli-docs。会议录制、妙记和逐字稿使用 feishu-cli-meetings；Drive 范围搜索属于本 Skill；全局文档/消息/应用搜索使用 feishu-cli-platform。
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Bash(jq:*) Bash(python3:*) Read Write
 ---
 
 # 飞书云空间

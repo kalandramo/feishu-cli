@@ -195,71 +195,13 @@ feishu-cli auth check --scope "search:docs:read" && feishu-cli search docs --que
 
 ## Token 解析策略
 
-CLI 把命令分成四类；另有少量只接受显式 flag 的严格命令：
+先按任务选择身份，再做与身份一致的预检。完整分类、默认值和失败行为见
+[身份选择](references/identity.md)；这里不重复维护命令表。
 
-### 1. 读类 · User 优先 + Tenant 兜底（`resolveOptionalUserTokenWithFallback`）
-
-登录后自动用 token.json 里的 User Token；未登录则回落 App Token（要求 Bot 在群/有相应权限）。
-
-优先级链：`--user-access-token` → `FEISHU_USER_ACCESS_TOKEN` → `~/.feishu-cli/token.json`（access 过期会自动刷新）→ `config.yaml` 的 `user_access_token` → App Token 兜底。
-
-涉及命令：
-- 消息读：`msg history`（container 路径）、`msg list`、`msg get`、`msg mget`、`msg thread-messages`、`msg resource-download`
-- 任务读：`task get`、`task list`、`task subtask list`、`task comment list`、`tasklist get/list/tasks`
-- 日历读：`calendar get/list/primary/agenda/freebusy/suggestion/room-find`、`calendar event get/list/search`、`calendar attendee list`
-- 文件/文档读：`file meta/stats/list/version list/version get`、`file download`、`doc blocks`（读）、`board image/nodes/export-code/lint`
-- **sheet 全家桶**（项目历史就是这种行为）：`sheet read/export/get/meta/list-sheets/find/replace/write/append/insert/delete/clear/import-md/dropdown/filter/filter-view/protect/style/merge/...`，所有 sheet 子命令都走 fallback，登录后默认 User、未登录 Tenant 兜底
-- wiki 读：`wiki get/nodes/spaces/space-get/export/export-tree`、`wiki member list`
-- drive：`drive pull/push/status`
-- 其他：`user info/search/list`
-
-### 2. 写类 / 默认 Bot 身份（`resolveOptionalUserToken`）
-
-默认 App Token（Bot 身份），仅当显式传 `--user-access-token` 或 `FEISHU_USER_ACCESS_TOKEN` 时才切到 User Token，**不会自动加载 token.json**。
-
-涉及命令：所有 `add/create/update/delete/move/copy/import/upload/send/reply/forward/merge-forward` 类、`comment reply`、`doc content-update / table 写`、`msg delete`（Bot 自撤回，传显式 User Token 给管理员撤回）等。
-
-### 3. 必须 User Token（`resolveRequiredUserToken` / `requireUserToken`）
-
-强制 User Token，没登录直接报错。
-
-| 命令 | 典型 scope |
-|---|---|
-| `search docs / messages / apps` | `search:docs:read` / `search:message` |
-| `msg pin/unpin/pins` | `im:message.pins` |
-| `msg reaction add/remove/list` | `im:message.reactions` |
-| `msg search-chats` | `im:chat:read` |
-| `msg flag create/cancel/list` | `im:feed.flag:read/write` |
-| `chat get/update/delete` | `im:chat:*` |
-| `approval task query/approve/reject/transfer` + `instance get/cancel/cc` | `approval:task` / `approval:instance:*` |
-| `task my` (`my_tasks`) | `task:task:read` |
-| `task search` | `task:task:read` |
-| `vc search/notes/recording`、`minutes *` | `vc:*`、`minutes:*` 相关 scope |
-| `mail *` | `mail:user_mailbox:*` |
-| `drive upload/download/add-comment/task-result/search/secure-label` | `drive:drive`、`drive:file:*`、`search:docs:read` |
-| `calendar rsvp` | `calendar:calendar.event:reply` |
-
-> 本表为速查非穷举，以各命令 `--help` 为准。
-
-`chat create` 和 `chat link` **不在此表**：当前命令没有 User Token flag，始终使用 App Token。
-
-### 4. 身份可选 · `--as bot|user|auto`（`resolveIdentityToken`）
-
-`bitable`、`okr`、**native Markdown**（`create/fetch/overwrite/patch/diff`）与 **`drive import/export/export-download/move`**
-使用这一模式。`auto` 优先 User Token；**未配置**时回落 Tenant Token；**已配置但解析/刷新失败 fail-closed**，禁止静默切 Bot。
-`bot` 强制 Tenant Token；`user` 强制 User Token，缺失即报错。默认值：**bitable / markdown / 上述 drive 入口默认 `auto`，okr 默认 `--as bot`**
-（OKR 的 user scope 通常未随默认登录域授予）。身份在 `--dry-run` 之后才 resolve。`chat member` 和 `msg history` 也提供同名
-身份选择，但使用各自的解析函数，边界以命令帮助为准。
-
-`markdown create/fetch/overwrite/patch/diff` 使用 Drive scope：创建/覆盖需要 `drive:file:upload`（或
-`drive:drive`），读取/diff 需要 `drive:file:download` 或 `drive:file.content:read`（或 `drive:drive`）。
-
-### 严格 flag-only
-
-`vc bot meeting-join` / `meeting-leave` 只认命令行显式 `--user-access-token`；不会读取
-`FEISHU_USER_ACCESS_TOKEN`，也不会自动加载 `token.json`。不传 flag 时固定使用 Bot 身份。
-
-登录时 CLI 会自动注入 `offline_access` 和 `auth:user.id:read`。如果 `refresh_token_present=false`，通常是应用未开通 `offline_access`，需要开通后重新登录。
+`auth check --scope` 读取本次 profile 的本地 User Token，不验证 Tenant Token、App 权限，
+也不验证 `--user-access-token` / `FEISHU_USER_ACCESS_TOKEN` 的授权范围。
+Bot-only 任务不能因为没有 User 登录而被阻断；先用 `doctor --only bot_identity` 检查应用身份，
+再根据目标 API 的实际结果判断资源权限。`--dry-run` 只验证本地请求，不证明线上权限。
 
 ## 业务域登录
 
@@ -399,13 +341,13 @@ profile 名校验规则 `[A-Za-z0-9_-]{1,64}`（禁止 `.` / `..` / `profiles` /
 
 ## Agent 约定
 
-1. 执行业务前先 `auth check --scope`，缺什么报什么。
+1. 先根据目标命令选择身份；仅本地 User Token 路径使用 `auth check --scope` 预检，Bot 路径参照 [身份选择](references/identity.md)。
 2. 登录优先用**两步模式**（`--no-wait --json` 拿链接 → 用户授权后 `--device-code --json` 续轮询）；能开后台任务时也可 `--json` 阻塞 + `run_in_background`。把 `verification_uri_complete` 原样发给用户，不改写 URL。
 3. 授权成功后读 `authorization_complete` 的 `missing_scopes`：非空只是 warning，开通后按需补授（增量授权，补缺失的几个即可，不会丢已授 scope）。
 4. 不把 `user_access_token` / `device_code` 写入文档、代码或日志。
-5. 错误信息明确指向 scope/token 时直接 `auth check`；只有错误不明确（"突然不工作"/网络异常）才用 `doctor` 缩小问题面，不要混用。
+5. scope/token 错误按实际身份排查：本地 User 用 `auth check`，Bot 检查应用 scope，显式 User Token 按接口错误排查该 Token；错误不明确（"突然不工作"/网络异常）时用 `doctor` 缩小问题面。
 6. 用户可能有多个飞书 Bot、或没指明用哪个时，先 `feishu-cli profile list --json`。看 `effective` 和 `env_overrides`，不要猜。
 7. 单次指定用 `feishu-cli --profile <name> <cmd>`（或 `FEISHU_PROFILE=<name>`）。不要为了跑一条业务去 `profile use`——会改全局指针。
-8. `--as bot` 只选身份，不选 App。看到 `env_overrides.app_id/app_secret=true` 必须告诉用户：环境变量仍会覆盖所选 profile 的 App 凭证；要用 profile YAML 中的凭证必须先 unset 对应变量。不要把 `--as bot` 和 `--user-access-token` 一起传。
+8. `--as bot` 只选身份，不选 App。环境变量仍覆盖 profile 的 App 凭证；需要该 profile 原配置时，仅在本次命令进程移除对应覆盖或显式指定 App 凭证，不更改全局环境，也不重复询问已经确定的 App 选择。不要把 `--as bot` 和 `--user-access-token` 一起传。
 9. `app_id` 可以出现在回复里；`app_secret` / 裸 token / `device_code` 禁止写入回复或文件。
 10. 自定义 `base_url`、明文 HTTP、带 body 的跨源重定向默认拒绝。未得到用户明确授权不要设置 `FEISHU_ALLOW_*` opt-in。

@@ -12,7 +12,7 @@
 - **认证与身份**：
   - **读类命令**（`triage` / `message` / `messages` / `thread`）：支持 `--as bot|user|auto`。User 身份支持 `mailbox="me"`；Bot 身份（`--as bot`）使用 Tenant Token 访问共享邮箱，不支持 `mailbox="me"`，必须显式提供 `--mailbox <邮箱地址>`。
   - **写类与管理命令**（`send` / `draft-*` / `reply` / `forward` / `message-modify` / `message-trash` 等）：需要 **User Access Token**（执行 `feishu-cli auth login` 登录）。
-- **预检**：按「[权限要求](#权限要求)」节的三档分级预检（仅签名 / 消息只读 / 写类）执行对应 `auth check`，不要只检最弱 scope
+- **预检**：本地 User 身份按「[权限要求](#权限要求)」选择 scope；Bot 身份检查应用权限，不用 User `auth check` 阻断。身份与预检通则见 `feishu-cli-platform` 的 auth 工作流。
 
 ## 命令速查
 
@@ -162,7 +162,7 @@ feishu-cli mail draft-send --draft-id $DRAFT_ID --confirm-send
 
 ## 权限要求
 
-所有 mail 命令均必须使用 **User Access Token**（先 `feishu-cli auth login`）。下表覆盖全部 mail 子命令：
+读类 `triage/message/messages/thread` 支持 User/Bot；Bot 必须显式指定邮箱，权限在应用侧开通。其余命令使用 User Token。下表列命令所需 scope；`auth check` 只用于当前 profile 的本地 User Token。
 
 | 命令 | 必需 scope |
 |---|---|
@@ -178,7 +178,7 @@ feishu-cli mail draft-send --draft-id $DRAFT_ID --confirm-send
 | `mail template create` | `mail:user_mailbox:readonly` + `mail:user_mailbox.message:modify` |
 | `mail template list` | `mail:user_mailbox:readonly` |
 
-> 推荐预检：
+> 本地 User Token 的推荐预检（Bot 不执行这组 User 检查）：
 > ```bash
 > # 仅签名（只需一个 scope，不要过度申请 message.* 系列）
 > feishu-cli auth check --scope "mail:user_mailbox:readonly"
@@ -190,7 +190,7 @@ feishu-cli mail draft-send --draft-id $DRAFT_ID --confirm-send
 
 ## 注意事项
 
-- **默认草稿**：`mail send` 默认只保存草稿（安全兜底）。必须显式加 `--confirm-send` 才会真正发送邮件。
+- **默认草稿**：`mail send` 默认只保存草稿。用户明确要求发送且目标、正文已齐备时使用 `--confirm-send`，不把 CLI 确认开关当作再次询问用户的理由；要求预览/草稿时不发送。
 - **`--page-size` 可省略**：飞书该端点强制要求 `page_size`，CLI 会自动补默认值并按端点上限截断——列表路径（无 `--query`）上限 20，`--query` 搜索路径上限 15。传超过上限的值不报错，只会截到上限。
 - **HTML 自动检测**：`send / draft-create / draft-edit / reply / reply-all` 如果 `--body` 含以下任一标签会自动按 HTML 发送：`<html>` / `<body>` / `<div>` / `<p>` / `<br>` / `<b>` / `<i>` / `<a ` / `<table>` / `<h1>` / `<h2>` / `<h3>`。可用 `--plain-text` 或 `--html` 强制指定。`forward` 的 body 类型限制见顶部「首期限制」块。
 - **引用块**：`reply/reply-all` 会自动把原邮件 body 作为 `> ` 引用块附加到回复正文后。

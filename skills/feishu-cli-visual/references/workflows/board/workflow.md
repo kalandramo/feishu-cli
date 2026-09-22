@@ -123,7 +123,7 @@ feishu-cli board import --engine local
 ### 快速开始（一键脚本）
 
 ```bash
-# Step 0: 定色板（生成 SVG 之前）—— 色值取自统一色板，不自创
+# Step 0: 定色板（生成 SVG 之前）—— 用户指定品牌/色板时沿用并校验；否则取统一色板
 #   结构分组用浅底/深边对、数据系列用 categorical 原色，见 references/style.md。
 #   原样按序取用统一色板时无需校验（已预校验，结论见 feishu-cli-visual palette.md）；
 #   仅当改色值/换底色时先跑校验（定位方式见 references/style.md"数据图表的系列色"一节）。
@@ -143,7 +143,7 @@ python3 ./skills/feishu-cli-visual/references/workflows/board/scripts/svg_to_boa
 
 1. **whiteboard-cli 翻译**：SVG → 节点 JSON
 2. **修 z_index**：按数组顺序显式赋值（修陷阱 1）
-3. **修剪 viewBox 溢出**：删超出节点（修陷阱 2）
+3. **修剪 viewBox 溢出**：按完整 `min-x min-y width height` 边界裁剪，支持非零/负原点；复合节点内部坐标保持原样（修陷阱 2）
 4. **分批 create-notes**：每批 300，间隔 0.3s（防限流）
 5. **验证**：拉真实节点数 / 类型分布对比
 
@@ -248,7 +248,7 @@ feishu-cli board create-notes $BOARD_ID /tmp/connectors.json -o json
 | `feishu-cli board create-notes <board_id> nodes.json` | 批量创建节点 | `--source-type` `--client-token` |
 | `feishu-cli board import <board_id> diagram.mmd --syntax mermaid` | 路径 A：服务端渲染 | `--engine [server\|local]` `--diagram-type` `--style` `--dry-run` |
 | `feishu-cli board svg-import <board_id> drawing.svg` | 路径 D：单 svg 节点 | `--x` `--y` `--width` `--height` `--source-type` `--dry-run` |
-| `python3 svg_to_board.py drawing.svg <board_id>` | 路径 C：5 步管道 | `--viewbox WxH`（覆盖 SVG 自带 viewBox，默认自动解析）`--keep-overflow`（不裁剪溢出节点）`--batch`（默认 300）`--interval`（默认 0.3s）`--dry-run` |
+| `python3 svg_to_board.py drawing.svg <board_id>` | 路径 C：5 步管道 | `--viewbox WxH`（覆盖为零原点视口，默认自动解析完整 viewBox）`--keep-overflow`（不裁剪溢出节点）`--batch`（默认 300）`--interval`（默认 0.3s）`--dry-run` |
 | `feishu-cli board update <board_id> nodes.json` | 更新画板（覆盖模式） | `--overwrite` `--snapshot` `--dry-run` `--stdin` |
 | `feishu-cli board delete <board_id> --all` | 删全部节点 | `--node-ids` |
 | `feishu-cli board clone <src> <dst>` | 克隆画板 | `--batch-size` `--interval` `--filter-types` `--dry-run` |
@@ -298,7 +298,7 @@ feishu-cli board create-notes $BOARD_ID /tmp/connectors.json -o json
 6. **节点文字简短**：标题 + 简短说明（< 12 字），不写长段落
 7. **同组节点视觉一致**：同分组用相同 `fill_color / border_color`
 8. **节点数上限**：单画板 > 2000 节点时编辑器开始卡顿，考虑拆图或简化
-9. **色值取自统一色板**：分组/系列色按 `references/style.md` 按序取用，不自创、不循环；改色值/换底色时才需跑 `feishu-cli-visual` 校验器（默认色板已预校验）
+9. **默认色板**：没有用户指定色板时，分组/系列色按 `references/style.md` 按序取用、不循环；采用品牌色或换底色时需跑 `feishu-cli-visual` 校验器（默认色板已预校验）
 
 ---
 
@@ -316,7 +316,7 @@ feishu-cli board create-notes $BOARD_ID /tmp/connectors.json -o json
 | 文字和背景色太接近 | 调 fill_color 或 text.text_color，确保对比度 | `references/style.md` |
 | 分组看不出来 | 同分组用同色，跨组换色 | `references/style.md` |
 | 数据系列颜色难分辨（色盲/投影） | 系列色改按统一色板顺序取用并跑校验器 | `feishu-cli-visual` |
-| 不确定该画柱状/折线/饼 | 按数据任务选形式，别按用户口头图表名 | `feishu-cli-visual` |
+| 不确定该画柱状/折线/饼 | 未指定形式时按数据任务选择；用户已指定时先遵循，必要时说明适用性 | `feishu-cli-visual` |
 | `2890002 invalid arg` | 含多余字段（id/locked/children 等只读字段） | `references/schema.md` |
 | Mermaid 服务端报错 | 切 `--engine local` 或改 SVG | `references/mermaid-engines.md` |
 
@@ -329,7 +329,7 @@ feishu-cli board create-notes $BOARD_ID /tmp/connectors.json -o json
 - [ ] 缩略图主元素都在：`feishu-cli board image <id> /tmp/check`（自动补实际扩展名）
 - [ ] 节点数对：`feishu-cli board nodes <id> | jq '.data.nodes | length'`
 - [ ] z_index 最小是大背景：见 `references/pitfalls.md` 通用诊断 Step 2
-- [ ] viewBox 无溢出：`max(x+w) ≤ viewBox_w`
+- [ ] viewBox 无溢出：`min_x ≤ x`、`x+w ≤ min_x+width`，y 方向同理
 - [ ] lint 质量分 ≥ 0.85：`feishu-cli board lint <id>`；节点 >600 时 over_capacity 固定扣 0.2 属预期，按 ≥ 0.65 评估
 
 任何一项不通过，回 `references/pitfalls.md` 排障。

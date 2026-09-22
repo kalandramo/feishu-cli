@@ -1,14 +1,14 @@
-# 飞书电子表格高级能力
+# 飞书电子表格工作流
 
 `feishu-cli sheet` 子命令组的高级能力——**筛选视图 CRUD + 筛选条件 CRUD** + **单元格下拉菜单 CRUD** + **浮动图片 / 单元格写图** + **批量样式**。这些高级能力均已在 `feishu-cli` 原生支持。
 
-> **范围划分**：基础读写（`sheet read` / `write` / `style` / `add-rows` / `add-sheet` 等）和 V3 富文本走主命令 `feishu-cli sheet` / `feishu-cli bitable`，本 skill **覆盖 filter-view（含 condition）+ dropdown + image + batch-set-style**。其他子命令查询 `feishu-cli sheet --help`；需要基础读写与 Markdown 互转（`import-md` / `export --format markdown`）的用法示例时读 `references/basic-commands.md`。
+> **按需阅读**：本工作流覆盖全部普通 Sheet 操作。本页展开 filter-view（含 condition）、dropdown、image 和 batch-set-style；基础读写、V3 富文本与 Markdown 互转（`import-md` / `export --format markdown`）见 `references/basic-commands.md`。多维表格另见 `../bitable/workflow.md`。
 
 ## 前置条件
 
 - **认证**：`sheets:spreadsheet` scope，User Token 或 App Token 均可。命令默认走 `resolveOptionalUserTokenWithFallback`：
   - 已 `feishu-cli auth login` → 自动用 User Token
-  - 未登录或显式 `--user-access-token` 留空 → 落回 App Token（Bot 身份）
+  - 未配置 User Token → 落回 App Token（Bot 身份）；显式传空 `--user-access-token` 不会跳过环境变量或本地 Token
 - **token / sheet-id 来源**：电子表格 URL `https://xxx.feishu.cn/sheets/<token>?sheet=<sheet-id>` 中分别取。
 
 ## 命令速查
@@ -224,9 +224,9 @@ feishu-cli sheet filter-view list --token $TOKEN --sheet-id $SHEET -o json | \
 - **filter-view 范围 v.s. 单元格写入限制**：filter-view `--range` 仅圈定视图作用域，**不写入数据**；写入受 V3 单 cell ≤ 50000 字符 / 单批 ≤ 5000 cells / 10 ranges 限制（详见主 `feishu-cli sheet` 命令）
 - **`-o json` 支持面**：`filter-view`（含 `condition get/list/create/update`）、`image get/update/media-upload/write-image/write-batch` 都支持 `-o json`（默认 `text`）；`dropdown get` 是 **JSON-only**（默认且只输出 JSON，无 `text` 模式）。仅 `dropdown set/update/delete` 无 `-o`，只回吐成功摘要文本（API 本身只返回 code/msg）
 
-## 何时该转主命令
+## 其他 Sheet 命令
 
-本 skill 覆盖 `filter-view`（含 `condition`）+ `dropdown` + `image` + `batch-set-style`。`feishu-cli sheet` 下其余子命令全部走主命令，不属于本 skill 范围：
+以下能力也属于本工作流；基础示例见 `references/basic-commands.md`，不必切换 Skill。按具体命令的 `--help` 查询参数：
 
 | 需求分组 | 走哪（主命令 `feishu-cli sheet <cmd>`） |
 |---|---|
@@ -243,7 +243,7 @@ feishu-cli sheet filter-view list --token $TOKEN --sheet-id $SHEET -o json | \
 | 浮动图片与单元格写图 | `image add/get/update/list/delete/media-upload/write-image/write-batch`（示例见上文） |
 | 多维表格的视图过滤/排序/分组 | `feishu-cli bitable view view-*-set`（语义更强，能配条件） |
 
-> 速查：`feishu-cli sheet --help` 子命令以 `--help` 实测为准；本 skill 负责 `filter-view`（含 `condition`）/ `dropdown` / `image` / `batch-set-style`，其余转主命令。
+> 速查：`feishu-cli sheet --help`。整表结构化处理优先考虑 `table-get` / `table-put`；只改已知区域时使用范围读写命令。
 
 ## 权限要求
 

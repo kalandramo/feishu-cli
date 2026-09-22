@@ -8,18 +8,23 @@
 feishu-cli doc create --title "文档标题" --output json
 ```
 
-创建后如需交付给用户，先解析 owner：
+用户已指定接收人时按该目标授权；否则，需要按 owner 配置交付时：
 
-1. 优先读取 `FEISHU_OWNER_EMAIL`，其次读取 `~/.feishu-cli/config.yaml` 的 `owner_email`。
+1. 用 CLI 读取生效配置；以下命令与创建、授权命令沿用本次相同的 `--profile` / `--config`（若已指定）：
+   ```bash
+   feishu-cli config get owner_email
+   feishu-cli config get transfer_ownership
+   ```
+   CLI 会合并环境变量与所选配置文件，不要另行读取旧布局的 `~/.feishu-cli/config.yaml`。
 2. 解析到 owner 后授予 `full_access`：
    ```bash
    feishu-cli perm add <document_id> --doc-type docx --member-type email --member-id <owner_email> --perm full_access --notification
    ```
-3. 仅当 `FEISHU_TRANSFER_OWNERSHIP=true` 或配置 `transfer_ownership: true` 时转移所有权：
+3. 仅当生效的 `transfer_ownership` 为 `true` 时转移所有权：
    ```bash
    feishu-cli perm transfer-owner <document_id> --doc-type docx --member-type email --member-id <owner_email> --notification
    ```
-4. 未配置 owner 时，不要使用占位邮箱，提示用户设置 `FEISHU_OWNER_EMAIL`。
+4. 未配置 owner 时，不使用占位邮箱；在当前会话返回文档链接，说明尚未按 owner 配置授权，不要求用户为已明确指定的接收人再设置环境变量。
 
 ## 用 Markdown 创建文档
 
@@ -33,7 +38,7 @@ feishu-cli doc import /tmp/doc.md --title "标题" --upload-images
 python3 -c "d=open('/tmp/doc.md','rb').read(); assert b'\xef\xbf\xbd' not in d; d.decode('utf-8')"
 ```
 
-`doc import` 已在 CLI 内校验非法 UTF-8 和 U+FFFD，但生成阶段仍建议先检查，避免把乱码写入云文档。
+`doc import` 会拒绝非法 UTF-8；合法编码中的 U+FFFD 替换字符不会被 CLI 拦截。上面的生成阶段检查可发现它，避免把乱码写入云文档。
 
 ## 编辑已有文档
 
@@ -85,12 +90,16 @@ feishu-cli doc content-update <document_id> --mode replace_all \
 
 ## Markdown 图片
 
-`doc import` 默认上传图片；`doc add` / `content-update` 使用 `--upload-images` 上传 Markdown 中的本地/网络图片并回填 Image Block。
+| 命令 | 图片处理 |
+|---|---|
+| `doc import` | 默认上传本地/网络图片；表格单元格图片也走导入管线 |
+| `doc add` | 显式传 `--upload-images` 上传本地/网络图片；表格单元格图片降级为文字占位 |
+| `doc content-update` | 使用网络图片 URL，不传 `--upload-images`；本地资源和该 flag 都会被拒绝 |
 
 ```bash
+# with-image.md 中使用 ![说明](https://example.com/image.png) 这样的网络图片
 feishu-cli doc content-update <document_id> --mode append \
-  --markdown-file /tmp/with-image.md \
-  --upload-images
+  --markdown-file /tmp/with-image.md
 ```
 
 单独插入图片或文件用 `doc media-insert`：
@@ -179,7 +188,7 @@ Markdown 表格导入 docx 时：
 
 - 行数 > 9：CLI 创建 9 行初始表，再用 `insert_table_row` 追加到同一 block。
 - 列数 > 9：按列组拆分，保留首列作为标识。
-- 单元格填充走 `batch_update` 批量写入（每批 ≤30 个，含追加行的新 cell；`content-update` 全部 mode 与 `doc add` 均生效），大表填充为秒级；主要耗时来自行 > 9 时 `insert_table_row` 逐行串行追加（受单文档 3 QPS 节流）。
+- `doc import` / `doc add` 的单元格填充走 `batch_update` 批量写入（每批 ≤30 个，含追加行的新 cell）；主要耗时来自行 > 9 时 `insert_table_row` 逐行串行追加（受单文档 3 QPS 节流）。`content-update` 由原子更新 API 解析 Markdown，不走这条本地块填充管线。
 - 行数极多（200+）时更适合用 Sheet：`feishu-cli sheet import-md report.md --title "报表"`。
 
 文档内已有表格结构操作：

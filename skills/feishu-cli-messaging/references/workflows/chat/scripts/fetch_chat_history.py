@@ -97,17 +97,26 @@ def find_cli(explicit: str | None) -> str:
     sys.exit("找不到 feishu-cli，请用 --cli 指定路径，或先 go build -o feishu-cli .")
 
 
-def run_cli_json(cli: str, args: list[str], user_token: str | None = None) -> dict | list | None:
-    """执行 CLI 子命令并解析为 JSON。返回 None 表示命令失败或非 JSON 输出。"""
+class FetchError(RuntimeError):
+    """读取失败或结果不完整，不能作为成功的导出交付。"""
+
+
+MAX_HISTORY_PAGES = 99
+MAX_THREAD_PAGES = 50
+
+
+def run_cli_json(cli: str, args: list[str], user_token: str | None = None) -> dict | list:
+    """执行 CLI；失败必须向上传播，只有可选的名字查询可以自行降级。"""
     cmd = [cli, *args]
     if user_token:
         cmd += ["--user-access-token", user_token]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as exc:
+        raise FetchError(f"无法执行 feishu-cli：{exc}") from exc
     if res.returncode != 0:
-        # 调用方决定是否打印；这里仅在 verbose 时回显
-        if os.environ.get("FETCH_CHAT_VERBOSE"):
-            print(f"[ERR] {' '.join(args)}\n{res.stderr.strip()}", file=sys.stderr)
-        return None
+        raise FetchError(f"{' '.join(args[:2])} 失败（退出码 {res.returncode}）："
+                         f"{res.stderr.strip() or res.stdout.strip()}")
     out = res.stdout
     try:
         return json.loads(out)
@@ -119,9 +128,40 @@ def run_cli_json(cli: str, args: list[str], user_token: str | None = None) -> di
         if candidates:
             try:
                 return json.loads(out[min(candidates):])
-            except Exception:
-                return None
-        return None
+            except json.JSONDecodeError:
+                pass
+        raise FetchError(f"{' '.join(args[:2])} 未返回合法 JSON，无法确认导出完整性")
+
+
+def read_page(data: dict, label: str) -> tuple[list[dict], dict, bool, str]:
+    """兼容两种字段命名，但不把异常响应形状误认成空结果。"""
+    if not isinstance(data, dict) or not any(k in data for k in ("items", "Items")):
+        raise FetchError(f"{label} 响应缺少 items，无法确认导出完整性")
+    items = data.get("items", data.get("Items")) or []
+    names = data.get("sender_names", data.get("SenderNames")) or {}
+    more = data.get("has_more", data.get("HasMore", False))
+    token = data.get("page_token", data.get("PageToken")) or ""
+    if (not isinstance(items, list) or any(not isinstance(item, dict) for item in items)
+            or not isinstance(names, dict) or not isinstance(more, bool) or not isinstance(token, str)):
+        raise FetchError(f"{label} 分页响应格式异常")
+    return items, names, more, token
+
+
+def append_unique(target: list[dict], items: list[dict], seen: set[str]) -> None:
+    """分页重叠时按 message_id 去重；没有 ID 的条目不擅自合并。"""
+    for item in items:
+        message_id = item.get("message_id")
+        if message_id and message_id in seen:
+            continue
+        if message_id:
+            seen.add(message_id)
+        target.append(item)
+
+
+def check_next_page(token: str, seen: set[str], label: str) -> None:
+    if not token or token in seen:
+        raise FetchError(f"{label} 仍有后续数据，但分页游标为空或重复；请缩小时间范围后重试")
+    seen.add(token)
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +197,9 @@ def fetch_history(cli: str, chat_id: str, container_type: str,
     all_items: list[dict] = []
     sender_names: dict[str, str] = {}
     page_token = ""
-    for round_i in range(1, 100):  # 安全上限
+    seen_tokens: set[str] = set()
+    seen_messages: set[str] = set()
+    for round_i in range(1, MAX_HISTORY_PAGES + 1):
         args = [
             "msg", "history",
             "--container-id", chat_id,
@@ -175,18 +217,14 @@ def fetch_history(cli: str, chat_id: str, container_type: str,
         if page_token:
             args += ["--page-token", page_token]
         d = run_cli_json(cli, args, user_token)
-        if not d:
-            break
-        items = d.get("items") or []
-        all_items.extend(items)
-        sn = d.get("sender_names") or {}
+        items, sn, has_more, page_token = read_page(d, "history")
+        append_unique(all_items, items, seen_messages)
         sender_names.update(sn)
-        has_more = d.get("has_more", False)
-        page_token = d.get("page_token") or ""
         print(f"  history 第 {round_i} 页: +{len(items)} 条, 累计 {len(all_items)}, has_more={has_more}")
-        if not has_more or not page_token:
-            break
-    return all_items, sender_names
+        if not has_more:
+            return all_items, sender_names
+        check_next_page(page_token, seen_tokens, "history")
+    raise FetchError(f"history 已达到 {MAX_HISTORY_PAGES} 页上限，数据尚未拉完；请缩小时间范围后重试")
 
 
 def fetch_thread(cli: str, thread_id: str, user_token: str | None) -> tuple[list[dict], dict[str, str]]:
@@ -195,27 +233,24 @@ def fetch_thread(cli: str, thread_id: str, user_token: str | None) -> tuple[list
     msgs: list[dict] = []
     sender_names: dict[str, str] = {}
     page_token = ""
-    for _ in range(50):
+    seen_tokens: set[str] = set()
+    seen_messages: set[str] = set()
+    for _ in range(MAX_THREAD_PAGES):
         args = ["msg", "thread-messages", thread_id, "--page-size", "50", "--sort", "ByCreateTimeAsc"]
         if page_token:
             args += ["--page-token", page_token]
         d = run_cli_json(cli, args, user_token)
-        if not d:
-            break
-        # 兼容 PascalCase（thread-messages） 和 snake_case（万一某天 CLI 统一了）
-        items = d.get("items") or d.get("Items") or []
-        msgs.extend(items)
-        sn = d.get("sender_names") or d.get("SenderNames") or {}
+        items, sn, has_more, page_token = read_page(d, f"thread {thread_id}")
+        append_unique(msgs, items, seen_messages)
         sender_names.update(sn)
-        has_more = d.get("has_more") if "has_more" in d else d.get("HasMore", False)
-        page_token = d.get("page_token") or d.get("PageToken") or ""
-        if not has_more or not page_token:
-            break
-    return msgs, sender_names
+        if not has_more:
+            return msgs, sender_names
+        check_next_page(page_token, seen_tokens, f"thread {thread_id}")
+    raise FetchError(f"thread {thread_id} 已达到 {MAX_THREAD_PAGES} 页上限，回复尚未拉完")
 
 
 # ---------------------------------------------------------------------------
-# 名字反解三级策略：mentions > sender_names > user info
+# 名字反解三级策略：sender_names > mentions > user info
 # ---------------------------------------------------------------------------
 
 def collect_mention_names(items: list[dict]) -> dict[str, str]:
@@ -237,7 +272,12 @@ def resolve_with_user_info(cli: str, open_ids: list[str], user_token: str | None
     """
     out: dict[str, str] = {}
     for oid in open_ids:
-        d = run_cli_json(cli, ["user", "info", oid, "-o", "json"])
+        try:
+            d = run_cli_json(cli, ["user", "info", oid, "-o", "json"])
+        except FetchError as exc:
+            if os.environ.get("FETCH_CHAT_VERBOSE"):
+                print(f"[名字兜底] {exc}", file=sys.stderr)
+            continue
         if isinstance(d, dict):
             n = d.get("name") or (d.get("user") or {}).get("name")
             if n:
@@ -246,13 +286,14 @@ def resolve_with_user_info(cli: str, open_ids: list[str], user_token: str | None
 
 
 def resolve_bot_app_ids(items: list[dict], default_bot_name: str) -> dict[str, str]:
-    """sender.id_type=app_id 时 id 是 cli_xxx，与 sender_names 中的 ou_xxx bot 不互通。
-    一律映射成调用方提供的 default_bot_name（通常就是群里那个 bot 的名字）。"""
+    """生成未知 Bot 的兜底名；多个 Bot 保留 ID，避免把不同发送者混为一人。"""
     out: dict[str, str] = {}
     for it in items:
         s = it.get("sender") or {}
         if s.get("id_type") == "app_id" and s.get("id"):
             out.setdefault(s["id"], default_bot_name)
+    if len(out) > 1:
+        out = {app_id: f"{name} ({app_id})" for app_id, name in out.items()}
     return out
 
 
@@ -537,10 +578,11 @@ def main() -> int:
         json.dumps(threads, ensure_ascii=False, indent=2), encoding="utf-8",
     )
 
-    # 名字反解：mentions > sender_names > user info > bot 默认名
+    # 服务端名字优先，其余来源只补缺失项。
     all_msgs = list(items) + [m for v in threads.values() for m in v]
     names = dict(sender_names)
-    names.update(collect_mention_names(all_msgs))
+    for sender_id, name in collect_mention_names(all_msgs).items():
+        names.setdefault(sender_id, name)
 
     open_ids = {(it.get("sender") or {}).get("id", "") for it in all_msgs}
     open_ids = {x for x in open_ids if x.startswith("ou_")}
@@ -548,7 +590,8 @@ def main() -> int:
     if remaining and not args.no_name_resolve:
         print(f"[3/4] 反解 {len(remaining)} 个 open_id（外部租户会 41050 静默跳过）")
         names.update(resolve_with_user_info(cli, remaining, user_token))
-    names.update(resolve_bot_app_ids(all_msgs, args.bot_name))
+    for sender_id, name in resolve_bot_app_ids(all_msgs, args.bot_name).items():
+        names.setdefault(sender_id, name)
     print(f"[3/4] done: 已知名字 {len(names)} 个")
     (out_dir / "names.json").write_text(
         json.dumps(names, ensure_ascii=False, indent=2), encoding="utf-8",
@@ -575,4 +618,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except (FetchError, OSError) as exc:
+        print(f"导出未完成：{exc}", file=sys.stderr)
+        sys.exit(1)

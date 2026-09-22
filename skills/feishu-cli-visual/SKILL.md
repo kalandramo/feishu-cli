@@ -1,14 +1,9 @@
 ---
 name: feishu-cli-visual
 description: >-
-  飞书可视化与展示统一入口，负责选择合适载体，并覆盖画板、Slides、妙笔BOX 动态组件、
-  妙搭 HTML 应用和统一数据可视化设计规范。用户要求画板/whiteboard、架构图、流程图、飞轮、
-  鱼骨、路线图、海报、插画、SVG/Mermaid、数据图表或 dashboard，创建 Slides/PPT，嵌入会动的
-  ECharts/地图/3D/window.magic 组件，或用妙搭/Miaoda/spark 发布 HTML 应用时必须使用本 Skill。
-  消息卡片由 feishu-cli-messaging 构造和发送；Markdown 图表导入由 feishu-cli-docs 执行。
-argument-hint: <dataviz|board|slides|htmlbox|apps> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(python3:*), Bash(node:*), Bash(npm:*), Read, Write
+  为飞书创建或编辑画板、Slides、文档内 HTMLBox 动态组件和妙搭 HTML 应用，选择图表与配色。适用于明确需要飞书载体的架构图、SVG/Mermaid、演示文稿、ECharts、地图或交互大屏。仅要求本地 SVG、PPTX 或 HTML 时不适用。消息卡片使用 feishu-cli-messaging；Markdown 图表导入使用 feishu-cli-docs。
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls. SVG conversion needs whiteboard-cli; local checks need Python 3.10+, Node.js and agent-browser.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Bash(python3:*) Bash(node:*) Bash(npm:*) Read Write
 ---
 
 # 飞书可视化与展示
@@ -16,7 +11,8 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(python3:*), Bash(n
 加载工作流后，将其中 `references/`、`scripts/`、`templates/`、`examples/` 相对路径按该
 `workflow.md` 所在目录解析；执行脚本时使用解析后的实际路径，不要依赖当前 shell 目录。
 
-先读 dataviz 选择载体；用户已明确载体时直接读取对应工作流。
+仅在目标是飞书产物时选择下列载体；用户只要本地文件时保留原交付方式。
+飞书载体尚未确定时先读 dataviz；已明确载体时直接读取对应工作流。
 
 ## 路由
 
@@ -30,10 +26,11 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(python3:*), Bash(n
 
 ## 载体边界
 
-- 要动态或交互：htmlbox。
-- 要静态且节点可编辑：board。
-- 要演示文稿：slides。
-- 要独立可分享 HTML 应用：apps。
+- 飞书文档内动态或交互：htmlbox。
+- 飞书静态画板且节点可编辑：board。
+- 飞书演示文稿：slides。
+- 用户要求发布为妙搭 HTML 应用：apps。
 - 要消息通知卡片：`feishu-cli-messaging` 的 card 工作流。
 
 改动色板或底色后运行本 Skill 的 dataviz 校验脚本；原样使用已校验色板无需重复验证。
+主题和风格是默认选项，优先满足用户指定的品牌色、明暗主题和载体，并验证可读性。

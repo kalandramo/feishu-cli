@@ -1,17 +1,9 @@
 ---
 name: feishu-cli-messaging
 description: >-
-  飞书即时消息统一入口，覆盖发送、回复、转发、合并转发、加急和资源下载，读取聊天历史、
-  Reaction、Pin 和群成员管理，构造 V2 交互卡片，以及 WebSocket 事件订阅。用户要求发消息或通知、
-  查看或导出群聊、管理群成员、制作告警/审批/报告/dashboard/营销宣传/节日贺卡/品牌展示/
-  手绘或深色创意/带按钮或图表的飞书卡片、监听消息或审批实时事件、处理消息附件时必须使用本
-  Skill。只要目标载体是飞书聊天或群消息，或者请求出现 msg/chat/card/event、post/interactive、
-  oc_/om_、Reaction、Pin、加急或消息内本地图片，即使用户没明确说 CLI，也必须触发本 Skill。
-  不要用于邮件读取/回复/草稿，也不要用于会议录制、妙记或逐字稿；这些分别使用
-  feishu-cli-mail 和 feishu-cli-meetings。全局消息搜索使用 feishu-cli-platform。
-argument-hint: <msg|chat|card|event> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Bash(python3:*), Read, Write
+  飞书即时消息、群聊与交互卡片：发送、回复、转发、加急、撤回、资源下载、聊天历史与话题、Reaction/Pin、成员管理和事件订阅。用于构造或预览 Card JSON 2.0、模板及卡片引用，也支持品牌宣传和主题风格卡片。仅处理 IM 消息及其资源；跨会话关键词搜索使用 feishu-cli-platform。明确不用于邮箱邮件、视频会议录制、妙记或逐字稿及其媒体下载，分别使用 feishu-cli-mail、feishu-cli-meetings。
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls. Bundled scripts require Python 3.10+.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Bash(jq:*) Bash(python3:*) Read Write
 ---
 
 # 飞书即时消息
@@ -42,7 +34,8 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Bash(python
 5. 发送与回复重试都使用同一 `--idempotency-key`；媒体上传可能重做，但服务端幂等键防止
    可见消息重复。只有命令返回非空 `message_id` 才判定成功。
 6. 外部群 232033 的排错读取 `references/workflows/chat/references/external-chat.md`。
-7. 卡片草稿与发送候选分开校验；发送前必须运行 card workflow 的
-   `lint_card.py --strict`，不得发送含占位符、示例 ID、假链接或未接通回调按钮的卡片。
+7. 完整 Card JSON 2.0 的发送候选运行 card workflow 的 `lint_card.py --strict`；
+   `template_id/card_id` 引用按 msg workflow 校验引用结构与实际 ID，不送入完整 JSON 的 linter。
+   接收者和卡片引用必须来自本次请求、已授权上下文或配置，不能把示例值当默认值。
 8. 用户点名卡片风格时使用 card workflow 内置的 19 个预设；使用本地头图或图标素材时，
    lint 与实际的 `msg send` / `msg reply` 都传 `--upload-images`，不要固化跨租户 `img_key`。

@@ -8,11 +8,10 @@ description: >-
   比较、覆盖或查找替换原生 Markdown 时必须使用本 Skill。
   本 Skill 只处理正文内容和文档/Markdown 文件转换。明确禁止用于文档评论、二进制文件导入、
   云盘目录和权限管理，这些使用 feishu-cli-storage；考勤等工作管理使用 feishu-cli-work；
-  动态组件使用 feishu-cli-visual。
+  文档内 HTMLBox、ECharts 交互图表和其他动态组件只使用 feishu-cli-visual，不属于正文编辑。
   只要意图是评论的 list/reply/resolve，即使请求中出现“文档”，也不要使用本 Skill。
-argument-hint: <read|write|import|export|markdown> [args]
-user-invocable: true
-allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Bash(python3:*), Bash(sleep:*), Read, Write
+compatibility: Requires feishu-cli v1.41.0+ and network access for Feishu API calls.
+allowed-tools: Bash(feishu-cli:*) Bash(./feishu-cli:*) Bash(./bin/feishu-cli:*) Bash(jq:*) Bash(python3:*) Bash(sleep:*) Read Write
 ---
 
 # 飞书文档
@@ -43,4 +42,4 @@ allowed-tools: Bash(feishu-cli:*), Bash(./feishu-cli:*), Bash(jq:*), Bash(python
 1. 解析 URL 后区分普通文档 token 与 wiki node token。
 2. 写入前确认目标、更新模式和影响范围；优先 dry-run 或测试文档。
 3. 导入前读取 `references/workflows/import/references/doc-guide.md`。
-4. 创建文档后按项目 owner_email 规则授权；不要把真实邮箱写进示例。
+4. 用户明确指定接收人时按其要求授权；其余按 write 工作流读取生效的 `owner_email` / `transfer_ownership`，仅在已配置 owner 时处理。未要求通知时在当前会话返回文档链接。

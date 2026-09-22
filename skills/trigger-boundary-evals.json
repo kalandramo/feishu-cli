@@ -1,0 +1,138 @@
+[
+  {
+    "query": "只在本地把 quarterly.csv 做成带筛选的 ECharts dashboard，输出 report.html，不要发布到飞书或妙搭。",
+    "expected_skills": [],
+    "reason": "本地HTML与飞书载体边界"
+  },
+  {
+    "query": "修改本地 slides.pptx 的标题和页脚，并另存为 final.pptx；不要创建飞书 Slides。",
+    "expected_skills": [],
+    "reason": "本地Office与飞书演示边界"
+  },
+  {
+    "query": "这张本地 architecture.svg 的 viewBox 原点不是零，请修复布局后保留 SVG 文件，不上传画板。",
+    "expected_skills": [],
+    "reason": "本地SVG不因关键词命中visual"
+  },
+  {
+    "query": "调用飞书未封装的 approval OpenAPI，先找实际 schema，再生成 api dry-run；此时不需要处理审批待办。",
+    "expected_skills": [
+      "feishu-cli-platform"
+    ],
+    "reason": "通用API意图优先于业务关键词"
+  },
+  {
+    "query": "这个 vc 接口没有专用命令，请查询请求参数并准备 raw API 请求，先不要查询真实会议记录。",
+    "expected_skills": [
+      "feishu-cli-platform"
+    ],
+    "reason": "会议域下的纯schema/API"
+  },
+  {
+    "query": "读取飞书文档 doxcn_fixture 的风险章节，然后把摘要发到 oc_fixture；已经明确授权发送。",
+    "expected_skills": [
+      "feishu-cli-docs",
+      "feishu-cli-messaging"
+    ],
+    "reason": "跨域任务按顺序加载"
+  },
+  {
+    "query": "将飞书 wiki 节点正文导出到本地 notes.md，然后给这个节点添加 user@example.com 为可编辑协作者。",
+    "expected_skills": [
+      "feishu-cli-docs",
+      "feishu-cli-storage"
+    ],
+    "reason": "正文导出与权限分离"
+  },
+  {
+    "query": "读取飞书共享邮箱 shared@example.com 的未读邮件，显式使用 Bot，没有个人登录，保持邮件状态不变。",
+    "expected_skills": [
+      "feishu-cli-mail"
+    ],
+    "reason": "Bot读取不要求个人登录"
+  },
+  {
+    "query": "请预览一封飞书邮件：收件人 user@example.com，主题发布检查，正文确认，先存草稿不要发送。",
+    "expected_skills": [
+      "feishu-cli-mail"
+    ],
+    "reason": "草稿意图不扩大为发送"
+  },
+  {
+    "query": "在飞书 Base 的 tbl_fixture 建一个单选状态字段：待办和完成。只给 v3 字段 JSON，不要旧的 property 包装。",
+    "expected_skills": [
+      "feishu-cli-data"
+    ],
+    "reason": "Base字段协议"
+  },
+  {
+    "query": "飞书 Sheets 的 sht_fixture/Sheet1 需要写入一列原生图片，按A1到A5的顺序处理，先给请求预览。",
+    "expected_skills": [
+      "feishu-cli-data"
+    ],
+    "reason": "原生图片与浮动图片路由"
+  },
+  {
+    "query": "只列出飞书文档评论并回复其中一条，不读取或替换正文。",
+    "expected_skills": [
+      "feishu-cli-storage"
+    ],
+    "reason": "评论不是正文编辑"
+  },
+  {
+    "query": "把 25MB 的 XLSX 导入飞书普通 Sheet，必须保留电子表格载体，不要转成多维表格。",
+    "expected_skills": [
+      "feishu-cli-storage"
+    ],
+    "reason": "二进制导入与产品类型保真"
+  },
+  {
+    "query": "导出 oc_fixture 群过去七天的聊天历史，展开话题并保留不同机器人的名字；任何分页失败请明确报告。",
+    "expected_skills": [
+      "feishu-cli-messaging"
+    ],
+    "reason": "导出完整性和名称"
+  },
+  {
+    "query": "给飞书文档嵌入浅色 ECharts 图表，使用我提供的品牌色，交互只需hover，不发群通知。",
+    "expected_skills": [
+      "feishu-cli-visual"
+    ],
+    "reason": "主题偏好与交付范围"
+  },
+  {
+    "query": "把 logo.svg 放到飞书画板中，要保留非零 viewBox 范围里的节点，不要变成一张截图。",
+    "expected_skills": [
+      "feishu-cli-visual"
+    ],
+    "reason": "飞书SVG正例"
+  },
+  {
+    "query": "用飞书机器人查询两名员工9月1日到9月2日的打卡记录，输入只需要日期，不要时间戳。",
+    "expected_skills": [
+      "feishu-cli-work"
+    ],
+    "reason": "attendance日期与身份"
+  },
+  {
+    "query": "给飞书已有日历事件增加参会者，calendar_id和event_id都已有，只给可执行CLI格式。",
+    "expected_skills": [
+      "feishu-cli-work"
+    ],
+    "reason": "calendar位置参数"
+  },
+  {
+    "query": "会议机器人按会议号123456789入会后返回了meeting_id，请使用相同Bot身份查询会议事件。",
+    "expected_skills": [
+      "feishu-cli-meetings"
+    ],
+    "reason": "meeting_id身份保持"
+  },
+  {
+    "query": "按 minute token 获取飞书妙记逐字稿并保存到本地，不创建日程也不发通知。",
+    "expected_skills": [
+      "feishu-cli-meetings"
+    ],
+    "reason": "下载会议产物"
+  }
+]

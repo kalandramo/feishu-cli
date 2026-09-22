@@ -17,8 +17,9 @@
    任务决定形式，有时答案根本不是图表（用大数字/指标行更诚实）。→ `references/choosing-a-form.md`
 2. **选管线**。见下方路由表。形式 + 载体共同决定走哪条管线。
 3. **按职能配色**。categorical（身份）/ ordinal（有序档位）/ sequential（量级）/
-   diverging（极性）/ status（状态），每种职能一条规则，色值一律取自
-   `references/palette.md`，**不自创色值、不循环生成第 9 个色**。
+   diverging（极性）/ status（状态），每种职能一条规则，未指定设计系统时使用
+   `references/palette.md`。用户提供品牌色或明确形式时沿用其要求，按实际色值/底色校验；
+   不为保持默认风格擅自改变用户的产物。默认色板不循环生成第 9 个色。
 4. **校验色板 —— 跑脚本，不要目测**（`scripts/` 相对本 workflow 目录）：
    ```bash
    node scripts/validate_palette.js
@@ -39,7 +40,7 @@
 5. **应用标记规格与自检**。细标记（bar ≤ 24px、线 2px）、相邻填充留 2px 底色间隔、
    网格用发丝线实线、文字永远穿文字色（系列身份由旁边的色块承载，不给文字上系列色）。
    完成后对照 `references/anti-patterns.md` 逐条检查，命中即错；最后渲染出来亲眼看一遍
-   （htmlbox 用 `../htmlbox/scripts/verify.sh` 截图、board 用 svg-export、card 实际发送预览）。
+   （htmlbox 用 `../htmlbox/scripts/verify.sh` 截图、board 用 svg-export、card 用离线校验或已授权的测试会话预览）。
 
 ## 管线路由
 
@@ -56,7 +57,7 @@ htmlbox（全控：色板 + 标记 + 交互 + 浏览器内自动校验）＞ boa
 **渲染后无 tooltip 兜底，直接标签要比默认更充分**）＞ card VChart（color 数组 + 形式选择）
 ＞ import Mermaid（classDef 配色 + 形式选择）。
 
-## 非协商规则（四条管线一体适用）
+## 默认设计规则（四条管线共用）
 
 > 完整验收清单以 `references/anti-patterns.md` 为准，本节是其中最高频规则的速览；
 > 两处如有出入，以 anti-patterns.md 为权威。

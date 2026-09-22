@@ -318,7 +318,7 @@ feishu-cli perm add <TOKEN> \
   --perm full_access \
   --notification
 
-# 2. 转移文档所有权
+# 2. 仅生效配置 transfer_ownership 为 true 时转移所有权
 feishu-cli perm transfer-owner <TOKEN> \
   --doc-type docx \
   --member-type email \
@@ -326,7 +326,7 @@ feishu-cli perm transfer-owner <TOKEN> \
   --notification
 ```
 
-仓库约定：授权邮箱按 `FEISHU_OWNER_EMAIL` 环境变量 → `~/.feishu-cli/config.yaml` 的 `owner_email` → 提示用户设置的顺序解析；第 2 步 `transfer-owner` 仅当 `transfer_ownership: true`（或 `FEISHU_TRANSFER_OWNERSHIP=true`）时执行。
+授权邮箱与是否转移所有权使用 CLI 的生效配置，沿用本次相同的 `--profile` / `--config`，不要固定读取旧目录。读取命令和未配置 owner 时的处理见 [文档创建后的授权流程](../../../../feishu-cli-docs/references/workflows/write/workflow.md#新建文档)。示例邮箱必须替换为用户指定或配置解析出的真实接收人。
 
 ## 错误排障
 

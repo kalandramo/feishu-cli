@@ -31,8 +31,8 @@
 不确定用哪个？**默认 ECharts**（覆盖绝大多数统计/关系图）；只有要真实地理、可旋转 3D、或 ECharts 给不出的自由视觉，才上 geo-3d / Canvas / SVG。
 
 **不确定画什么形式**（柱还是线？要不要干脆一个大数字？）→ 先看 `feishu-cli-visual` 技能
-（任务→形式启发式 + 反模式清单）。**系列配色**统一取该技能色板 dark 列（约定见
-`references/gallery.md` 开头），不自创色值。
+（任务→形式启发式 + 反模式清单）。**系列配色**优先用户指定的品牌/设计系统；
+未指定时按实际明暗背景选择统一色板对应列，见 `references/gallery.md` 开头。
 
 ## 不止画图：window.magic 文档小程序运行时
 
@@ -50,12 +50,12 @@
 
 ## 绘制工作流（每张图都照做）
 
-1. **照配方写一页自包含 HTML 到 `/tmp/x.html`**。从 `gallery.md` / `geo-3d.md` 取对应骨架 + 配方；统一深色背景、容器固定高度（如 `#chart{height:360px}`）、`width:100%`、监听 `resize` 调 `chart.resize()`。系列色按 `gallery.md` 开头的配色约定取用；换了色就先跑一遍色板校验（命令在同一段）。
-2. **本地浏览器验证它真渲染、真在动——这步不能跳**。iframe 里任何顶层 JS 错误会让整张图**白屏且不报错**（未捕获异常走 pageerror、不进 console），光读代码看不出来。直接跑封装好的验证脚本——它用全新浏览器 session 打开页面、抓 page error / console、数 canvas/svg 节点、截图，并据此给通过/未过判定：
+1. **照配方写一页自包含 HTML 到 `/tmp/x.html`**。从 `gallery.md` / `geo-3d.md` 取对应骨架 + 配方；按用户指定的主题、品牌与载体选择明暗背景（未指定时可用配方默认值）、容器固定高度（如 `#chart{height:360px}`）、`width:100%`、监听 `resize` 调 `chart.resize()`。系列色按 `gallery.md` 开头的配色约定取用；换了色就先跑一遍色板校验（命令在同一段）。
+2. **本地浏览器验证它真渲染、真在动——这步不能跳**。iframe 里任何顶层 JS 错误会让整张图**白屏且不报错**（未捕获异常走 pageerror、不进 console），光读代码看不出来。先确认已安装 `python3`、`agent-browser` 及浏览器依赖，再运行验证脚本。它为每次运行创建独立 session，抓 page error / console、统计 canvas/svg、保存本次新生成的 `.verify.png`；只关闭自己的 session，不影响其它浏览器任务：
    ```bash
    scripts/verify.sh /tmp/x.html        # 地图/CDN 重的加等待秒数：scripts/verify.sh /tmp/x.html 5
    ```
-   退出码 0 才算初步通过；但「画对没画对、在不在动」机器判不了，**务必再肉眼看它打印的那张截图**。排查白屏见 `references/pitfalls.md`。
+   退出码 0 才算初步通过；页面错误返回 1，依赖、JSON 响应或截图失败返回 2。截图只能验证静态内容，**务必查看截图并另行观察动画行为**。排查白屏见 `references/pitfalls.md`。
 3. **落库**：`feishu-cli doc htmlbox create <doc_id> --html-file /tmp/x.html`。
 4. **改图**：`feishu-cli doc htmlbox update <doc_id> <block_id> --html-file /tmp/x2.html`（block_id 会变，后续用返回的 `new_block_id`）。
 
@@ -81,11 +81,12 @@
 
 ## 创建后交付（按需）
 
-文档要交给用户时：按 `feishu-cli-docs` 的 owner 授权流程（`perm add full_access` + 视配置 `perm transfer-owner`），并按全局规则发一张飞书卡片通知。
+文档交付按用户本次要求和已授权配置执行。需要授权时按 `feishu-cli-docs` 的 owner 流程操作；
+只有用户要求通知或已有适用的通知授权时才发送卡片。没有这些要求时，返回文档链接即可。
 
 ## 参考文档与脚本
 
-- `scripts/verify.sh <html> [等待秒数]` — **落库前验证脚本**（工作流第 2 步用它）：全新 session 打开 → 抓 page error/console → 数 canvas/svg → 截图 → 给通过判定；退出码 0 才算初步通过，仍须肉眼看截图
+- `scripts/verify.sh <html> [等待秒数]` — **落库前验证脚本**（内部使用 `scripts/verify_html.py`；等待为 0–30 秒，默认 3 秒）：全新 session 打开 → 抓 page error/console → 数 canvas/svg → 截图 → 给通过判定；退出码 0 才算初步通过，仍须肉眼看截图
 - `scripts/animate_diagram.py --pattern pattern.json --out x.html` — 拓扑 / Agent 编排动画生成器：结构化 JSON → 自包含 SVG 动画 HTML
 - `references/gallery.md` — **主力配方库**：4 种通用骨架（ECharts/Canvas/Three.js/SVG-CSS）+ 按图表类型的可直接用配方
 - `references/animated-flowchart.md` — 拓扑 / Agent 编排动画 recipe，配套输入格式见 `references/pattern-schema.md`
