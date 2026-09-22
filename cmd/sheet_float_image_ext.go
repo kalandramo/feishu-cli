@@ -155,12 +155,26 @@ parent_type 按表格类型自动选择：原生飞书表格用 sheet_image，�
 // image write-image
 var sheetImageWriteCmd = &cobra.Command{
 	Use:   "write-image <spreadsheet_token> <sheet_id>",
-	Short: "把本地图片写入单元格",
-	Long: `将本地图片写入指定单元格（值类型为图片，非浮动图片）。目标范围起止单元格必须相同。
+	Short: "把网络或本地图片写入单元格",
+	Long: `将网络图片（HTTPS URL）或本地图片写入指定单元格（原生图片单元格，非浮动图片），并通过 V3 read-rich 回读验证。
+目标范围起止单元格必须相同（单格）。
+
+写入规则与说明:
+  - --image 接受 HTTPS 网络图片 URL 或本地图片文件路径。
+  - --range 必须是单个单元格（如 A1 或 0b1212!A1:A1）。
+  - 网络图片下载后会校验响应状态、图片格式和大小（默认 ≤20 MiB）。
+  - 严禁用 =IMAGE(...) 公式或 Markdown 图片语法替代；必须写入原生图片单元格以保证持久渲染。
+  - JPEG/PNG/GIF 直接写入；BMP/TIFF/WebP 自动转 PNG，原文件不变。
+  - HEIC/BPG 原样提交，能否写入取决于服务端支持，失败时返回非零退出码。
+  - 文件名缺少有效图片后缀时按实际格式补齐；转码图片统一使用 .png 后缀。
+  - 写入完成后自动通过 V3 read-rich 回读验证原生 image_token。
 
 示例:
-  feishu-cli sheet image write-image shtcnxxxxxx 0b1212 --range "0b1212!A1" --image ./logo.png
-  feishu-cli sheet image write-image shtcnxxxxxx 0b1212 --range "A1" --image ./logo.png --name logo.png`,
+  # 写入网络图片并回读验证
+  feishu-cli sheet image write-image shtcnxxxxxx 0b1212 --range "A1" --image https://example.com/logo.png
+
+  # 写入本地图片
+  feishu-cli sheet image write-image shtcnxxxxxx 0b1212 --range "0b1212!B2" --image ./logo.png --name logo.png -o json`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		spreadsheetToken := args[0]
@@ -168,26 +182,63 @@ var sheetImageWriteCmd = &cobra.Command{
 		rangeStr, _ := cmd.Flags().GetString("range")
 		imagePath, _ := cmd.Flags().GetString("image")
 		name, _ := cmd.Flags().GetString("name")
+		allowPrivate, _ := cmd.Flags().GetBool("allow-private-net")
+		output, _ := cmd.Flags().GetString("output")
+		if output != "" && output != "text" && output != "json" {
+			return fmt.Errorf("不支持的输出格式 %q，仅支持 text, json", output)
+		}
 
 		if rangeStr == "" || imagePath == "" {
 			return fmt.Errorf("--range、--image 均为必填项")
-		}
-		if name == "" {
-			name = filepath.Base(imagePath)
 		}
 
 		normalizedRange, err := normalizeSheetWriteImageRange(unescapeSheetRange(rangeStr), sheetID)
 		if err != nil {
 			return err
 		}
-		rangeStr = normalizedRange
 
 		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
 
-		if err := client.WriteSheetImage(client.Context(), spreadsheetToken, rangeStr, imagePath, name, userAccessToken); err != nil {
-			return err
+		item := client.BatchWriteSheetImageItem{
+			Cell: normalizedRange,
+			Name: name,
 		}
-		fmt.Printf("图片写入成功！范围: %s\n", rangeStr)
+		trimmedImage := strings.TrimSpace(imagePath)
+		lowerImage := strings.ToLower(trimmedImage)
+		if strings.HasPrefix(lowerImage, "https://") || strings.HasPrefix(lowerImage, "http://") {
+			item.URL = trimmedImage
+		} else {
+			item.Path = trimmedImage
+		}
+
+		opts := client.BatchWriteSheetImageOptions{
+			Workers:         1,
+			MaxBytes:        client.DefaultSheetImageBatchMaxBytes,
+			AllowPrivateNet: allowPrivate,
+		}
+
+		result, runErr := client.BatchWriteSheetImages(cmd.Context(), spreadsheetToken, sheetID, []client.BatchWriteSheetImageItem{item}, opts, userAccessToken)
+		if output == "json" {
+			if len(result.Outcomes) > 0 {
+				if err := printJSON(result.Outcomes[0]); err != nil {
+					return err
+				}
+			} else {
+				if err := printJSON(result); err != nil {
+					return err
+				}
+			}
+		} else {
+			if runErr == nil && len(result.Outcomes) > 0 && result.Outcomes[0].Status == "verified" {
+				fmt.Fprintf(cmd.OutOrStdout(), "图片写入成功！范围: %s，图片 Token: %s\n", normalizedRange, result.Outcomes[0].ImageToken)
+			}
+		}
+		if runErr != nil {
+			if len(result.Outcomes) > 0 && result.Outcomes[0].Error != "" {
+				return fmt.Errorf("图片写入失败: %s", result.Outcomes[0].Error)
+			}
+			return runErr
+		}
 		return nil
 	},
 }
@@ -197,8 +248,11 @@ var sheetImageWriteCmd = &cobra.Command{
 func normalizeSheetWriteImageRange(rangeStr, sheetID string) (string, error) {
 	body := strings.TrimSpace(rangeStr)
 	prefix := sheetID
-	if idx := strings.Index(body, "!"); idx >= 0 {
-		prefix = body[:idx]
+	if idx := strings.LastIndex(body, "!"); idx >= 0 {
+		p := strings.Trim(body[:idx], "'")
+		if p != sheetID {
+			return "", fmt.Errorf("单元格范围的工作表 ID %q 与目标 %q 不一致（飞书接口要求使用 sheet_id 而非工作表标题）", p, sheetID)
+		}
 		body = body[idx+1:]
 	}
 
@@ -213,12 +267,13 @@ func normalizeSheetWriteImageRange(rangeStr, sheetID string) (string, error) {
 	if start == "" || end == "" {
 		return "", fmt.Errorf("--range 必须是单个单元格，如 A1 或 %s!A1", sheetID)
 	}
-	if start != end {
+	if !strings.EqualFold(start, end) {
 		return "", fmt.Errorf("sheet image write-image 只支持单个单元格，不能写入多单元格范围 %q；请改用 %s", rangeStr, start)
 	}
-	if prefix == "" {
-		return start + ":" + start, nil
+	if !sheetCellRE.MatchString(start) {
+		return "", fmt.Errorf("--range 必须是有效的单个单元格地址（当前 %q）", start)
 	}
+	start = strings.ToUpper(start)
 	return prefix + "!" + start + ":" + start, nil
 }
 
@@ -266,8 +321,10 @@ func init() {
 
 	// write-image
 	sheetImageWriteCmd.Flags().String("range", "", "目标单元格（如 A1 或 <sheetId>!A1，起止须相同）（必填）")
-	sheetImageWriteCmd.Flags().String("image", "", "本地图片文件路径（必填）")
-	sheetImageWriteCmd.Flags().String("name", "", "图片文件名（默认取文件 basename）")
+	sheetImageWriteCmd.Flags().String("image", "", "图片文件路径或 HTTPS URL（必填）")
+	sheetImageWriteCmd.Flags().String("name", "", "图片文件名（默认取文件 basename 或 URL 资源名）")
+	sheetImageWriteCmd.Flags().Bool("allow-private-net", false, "允许从私有网络或内网 IP 下载图片（用于企业内网 CDN/对象存储）")
+	sheetImageWriteCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
 	sheetImageWriteCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 	mustMarkFlagRequired(sheetImageWriteCmd, "range", "image")
 }

@@ -109,15 +109,27 @@ feishu-cli sheet dropdown delete --token shtcnxxxxxx --ranges "0b1212!A1:A100,0b
 > `get`/`update`/`delete` 均接受 `--spreadsheet-token` 作为 `--token` 的兼容别名（`set` 仅 `--token`）。
 > `update` 独有 `--highlight`：仅开启选项上色高亮（`highlightValidData=true`），传 `--colors` 时自动开启；`get` 只输出 JSON（无 text 模式）。
 
-### 浮动图片 image（7 命令）
+### 浮动图片与单元格图片 image
 
 ```bash
 # media-upload —— 上传本地图片素材，返回 file_token（再用于 image add）
 feishu-cli sheet image media-upload shtcnxxxxxx ./logo.png
 feishu-cli sheet image media-upload shtcnxxxxxx ./logo.png --name banner.png -o json
 
-# write-image —— 把本地图片直接写入单元格（值类型为图片，非浮动图片；起止单元格须相同）
-feishu-cli sheet image write-image shtcnxxxxxx 0b1212 --range "0b1212!A1" --image ./logo.png
+# write-image —— 把网络图片（HTTPS URL）或本地图片写入单元格（原生单元格图片，非浮动图片；自动回读验证）
+feishu-cli sheet image write-image shtcnxxxxxx 0b1212 --range "0b1212!A1" --image https://example.com/logo.png
+feishu-cli sheet image write-image shtcnxxxxxx 0b1212 --range "0b1212!A1" --image ./logo.png --name logo.png
+
+# write-batch —— URL / 本地图片批量写成原生图片单元格并回读验证（支持文件、stdin '-' 或行内 JSON）
+cat >/tmp/images.json <<'JSON'
+[
+  {"cell":"B2","url":"https://example.com/1.jpg"},
+  {"cell":"B3","path":"/tmp/2.png","name":"product-2.png"}
+]
+JSON
+feishu-cli sheet image write-batch shtcnxxxxxx 0b1212 --manifest /tmp/images.json -o json
+# 亦可通过管道直接传入
+cat /tmp/images.json | feishu-cli sheet image write-batch shtcnxxxxxx 0b1212 --manifest - -o json
 
 # get —— 获取单个浮动图片
 feishu-cli sheet image get shtcnxxxxxx 0b1212 ScDmuyHm
@@ -134,7 +146,13 @@ feishu-cli sheet image list shtcnxxxxxx 0b1212
 feishu-cli sheet image delete shtcnxxxxxx 0b1212 ScDmuyHm
 ```
 
-> 浮动图片（float image，可拖动覆盖在单元格上）≠ 单元格写图（write-image，图片作为单元格值）。`media-upload` 的 parent_type 固定 `sheet_image`，write-image 的目标范围起止单元格须相同。
+> **单元格图片写入规则（单张与批量通用）**：
+> 1. 浮动图片（float image，可拖动覆盖在单元格上方）≠ 单元格原生图片（write-image/write-batch，图片作为单元格富文本值嵌入）。
+> 2. 严禁使用 V2 `sheet write` 写入 `=IMAGE(...)` 字符串公式，也严禁在 `sheet import-md` 中使用 Markdown 图片语法 `![]()`，飞书服务端对外部图片公式计算极其脆弱（易显示为 `#ERROR` 或纯文本链接），只有通过 `values_image` 写入的原生图片才能持久稳定渲染。
+> 3. 网络图片仅接受 HTTPS，默认单张 ≤20 MiB；内部环境（如企业私有 CDN/TOS）可加 `--allow-private-net`。
+> 4. JPEG/PNG/GIF 直接写入；BMP/TIFF/WebP 自动转 PNG，原文件不变。HEIC/BPG 原样提交，能否写入取决于服务端支持。文件名缺少有效图片后缀时按实际格式补齐，转码图片统一使用 `.png` 后缀。`--workers` 控制下载与预处理并发，写入同一表格时串行执行。
+> 5. 单张场景用 `write-image --range "A1" --image <url|path>`；多张场景统一用 `write-batch --manifest <file|-|json>`。
+> 6. 命令写入后均自动通过 V3 `read-rich` 回读验证原生 `image_token`，校验失败即返回非零退出码。`media-upload` 的 parent_type 固定 `sheet_image`。
 
 ### 批量样式 batch-set-style（1 命令）
 
@@ -204,7 +222,7 @@ feishu-cli sheet filter-view list --token $TOKEN --sheet-id $SHEET -o json | \
 - **dropdown 用英文逗号分隔 不是中文「，」**：`--options` CSV 解析器只识别 ASCII `,`，中文逗号会让多选项合并成一个，容易踩
 - **filter-view 条件已可用 CLI 写**：用 `filter-view condition create/update`（按列字母 `--condition-id` 定位）；多维表格（非电子表格）的复杂条件仍走 **`feishu-cli bitable view view-filter-set`**
 - **filter-view 范围 v.s. 单元格写入限制**：filter-view `--range` 仅圈定视图作用域，**不写入数据**；写入受 V3 单 cell ≤ 50000 字符 / 单批 ≤ 5000 cells / 10 ranges 限制（详见主 `feishu-cli sheet` 命令）
-- **`-o json` 支持面**：`filter-view`（含 `condition get/list/create/update`）、`image get/update/media-upload` 都支持 `-o json`（默认 `text`）；`dropdown get` 是 **JSON-only**（默认且只输出 JSON，无 `text` 模式）。仅 `dropdown set/update/delete` 与 `image write-image` 无 `-o`，只回吐成功摘要文本（API 本身只返回 code/msg）
+- **`-o json` 支持面**：`filter-view`（含 `condition get/list/create/update`）、`image get/update/media-upload/write-image/write-batch` 都支持 `-o json`（默认 `text`）；`dropdown get` 是 **JSON-only**（默认且只输出 JSON，无 `text` 模式）。仅 `dropdown set/update/delete` 无 `-o`，只回吐成功摘要文本（API 本身只返回 code/msg）
 
 ## 何时该转主命令
 
@@ -222,7 +240,7 @@ feishu-cli sheet filter-view list --token $TOKEN --sheet-id $SHEET -o json | \
 | 单范围样式 / 合并 / 保护 | `style` / `merge` / `unmerge` / `protect` / `unprotect`（多范围批量样式走本 skill `batch-set-style`） |
 | 查找 / 替换 / 简单筛选 | `find` / `replace` / `filter`（注意：与 `filter-view` 不同，`filter` 是临时筛选） |
 | 导出 / Markdown 导入 | `export`（XLSX/CSV/MD）/ `import-md`（用法见 `references/basic-commands.md`） |
-| 浮动图片完整 CRUD | `image add/get/update/list/delete/media-upload/write-image`（示例见上文） |
+| 浮动图片与单元格写图 | `image add/get/update/list/delete/media-upload/write-image/write-batch`（示例见上文） |
 | 多维表格的视图过滤/排序/分组 | `feishu-cli bitable view view-*-set`（语义更强，能配条件） |
 
 > 速查：`feishu-cli sheet --help` 子命令以 `--help` 实测为准；本 skill 负责 `filter-view`（含 `condition`）/ `dropdown` / `image` / `batch-set-style`，其余转主命令。
@@ -241,6 +259,7 @@ feishu-cli sheet filter-view list --token $TOKEN --sheet-id $SHEET -o json | \
 | `dropdown get/update/delete` | `cmd/sheet_dropdown_ext.go` |
 | `image add/list/delete` | `cmd/sheet_image.go` |
 | `image get/update/media-upload/write-image` | `cmd/sheet_float_image_ext.go` |
+| `image write-batch` | `cmd/sheet_image_write_batch.go` |
 | `batch-set-style` | `cmd/sheet_style_batch.go` |
 
 filter-view 走 SDK `larksheets.SpreadsheetSheetFilterView`；dropdown / batch-set-style 走通用 HTTP 直调 V2 端点（SDK 未封装）。
