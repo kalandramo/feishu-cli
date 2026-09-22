@@ -162,8 +162,11 @@ var sheetImageWriteCmd = &cobra.Command{
 写入规则与说明:
   - --image 接受 HTTPS 网络图片 URL 或本地图片文件路径。
   - --range 必须是单个单元格（如 A1 或 0b1212!A1:A1）。
-  - 网络图片下载后会校验响应状态、图片 MIME 类型（支持 jpeg/png/gif/webp）和大小（默认 ≤20MB）。
+  - 网络图片下载后会校验响应状态、图片格式和大小（默认 ≤20 MiB）。
   - 严禁用 =IMAGE(...) 公式或 Markdown 图片语法替代；必须写入原生图片单元格以保证持久渲染。
+  - JPEG/PNG/GIF 直接写入；BMP/TIFF/WebP 自动转 PNG，原文件不变。
+  - HEIC/BPG 原样提交，能否写入取决于服务端支持，失败时返回非零退出码。
+  - 文件名缺少有效图片后缀时按实际格式补齐；转码图片统一使用 .png 后缀。
   - 写入完成后自动通过 V3 read-rich 回读验证原生 image_token。
 
 示例:

@@ -27,7 +27,10 @@ manifest 可以是文件路径、行内 JSON 数组或 "-"（从标准输入读�
     {"cell":"B3","path":"/tmp/2.png","name":"product-2.png"}
   ]
 
-网络图片仅接受 HTTPS，下载后校验响应状态、图片 MIME 和大小。
+网络图片仅接受 HTTPS，下载后校验响应状态、图片格式和大小。
+下载与预处理可并发，同一批次的图片写入串行执行。
+BMP/TIFF/WebP 自动转 PNG，原文件不变；HEIC/BPG 原样提交，结果取决于服务端支持。
+文件名缺少有效图片后缀时按实际格式补齐，转码图片统一使用 .png 后缀。
 成功条件是每个目标单元格回读为 type=image 且包含 image_token。部分失败会输出逐格结果并返回非零退出码。
 
 示例:
@@ -162,7 +165,7 @@ func init() {
 	sheetImageCmd.AddCommand(sheetImageWriteBatchCmd)
 
 	sheetImageWriteBatchCmd.Flags().String("manifest", "", "图片 manifest（JSON 数组、文件路径或 - 从标准输入读取，必填）")
-	sheetImageWriteBatchCmd.Flags().Int("workers", client.DefaultSheetImageBatchWorkers, "并发下载/写入 worker 数（1-10）")
+	sheetImageWriteBatchCmd.Flags().Int("workers", client.DefaultSheetImageBatchWorkers, "并发下载/预处理 worker 数（1-10，图片写入串行执行）")
 	sheetImageWriteBatchCmd.Flags().Int64("max-image-bytes", client.DefaultSheetImageBatchMaxBytes, "单张图片最大字节数")
 	sheetImageWriteBatchCmd.Flags().Bool("allow-private-net", false, "允许从私有网络或内网 IP 下载图片（用于企业内网 CDN/对象存储）")
 	sheetImageWriteBatchCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")

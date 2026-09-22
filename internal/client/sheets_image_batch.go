@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -171,13 +173,15 @@ func BatchWriteSheetImages(ctx context.Context, spreadsheetToken, sheetID string
 	defer transport.CloseIdleConnections()
 
 	jobs := make(chan int)
+	// 飞书要求同一文档串行写入；下载仍并发，每个 worker 最多保留一个待写临时文件。
+	writeSlot := make(chan struct{}, 1)
 	var wg sync.WaitGroup
 	for n := 0; n < workers; n++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for index := range jobs {
-				result.Outcomes[index] = writeSingleSheetImage(ctx, httpClient, spreadsheetToken, items[index], maxBytes, opts.AllowPrivateNet, uat)
+				result.Outcomes[index] = writeSingleSheetImage(ctx, httpClient, spreadsheetToken, items[index], maxBytes, opts.AllowPrivateNet, uat, writeSlot)
 			}
 		}()
 	}
@@ -298,7 +302,7 @@ func BatchWriteSheetImages(ctx context.Context, spreadsheetToken, sheetID string
 	return result, nil
 }
 
-func writeSingleSheetImage(ctx context.Context, httpClient *http.Client, spreadsheetToken string, item BatchWriteSheetImageItem, maxBytes int64, allowPrivateNet bool, uat string) BatchWriteSheetImageOutcome {
+func writeSingleSheetImage(ctx context.Context, httpClient *http.Client, spreadsheetToken string, item BatchWriteSheetImageItem, maxBytes int64, allowPrivateNet bool, uat string, writeSlot chan struct{}) BatchWriteSheetImageOutcome {
 	source := "path"
 	if item.URL != "" {
 		source = "url"
@@ -322,7 +326,8 @@ func writeSingleSheetImage(ctx context.Context, httpClient *http.Client, spreads
 		defer os.Remove(imagePath)
 	}
 
-	if err := validateLocalSheetImage(imagePath, maxBytes); err != nil {
+	ext, err := validateLocalSheetImage(imagePath, maxBytes)
+	if err != nil {
 		outcome.Error = err.Error()
 		return outcome
 	}
@@ -336,28 +341,73 @@ func writeSingleSheetImage(ctx context.Context, httpClient *http.Client, spreads
 			finalName = filepath.Base(imagePath)
 		}
 	}
+	normalizedPath, normalizedExt, err := normalizeSheetImageFile(imagePath, ext, maxBytes)
+	if err != nil {
+		outcome.Error = err.Error()
+		return outcome
+	}
+	if normalizedPath != imagePath {
+		defer os.Remove(normalizedPath)
+		if cleanupTemp {
+			// 转换完成即可释放下载原件，等待写入时只保留转换后的文件。
+			_ = os.Remove(imagePath)
+		}
+		imagePath = normalizedPath
+	}
+	ext = normalizedExt
+	finalName = normalizeSheetImageName(finalName, ext)
 
-	// 注意：底层 v2APICallWithToken 当前未透出 HTTP 响应 Header，因此这里无法获取 x-ogw-ratelimit-reset，
-	// DoVoidWithRetry 将退化为带 Jitter 的 Full Jitter 指数退避，但仍能正确感知 429/99991400 并响应 Context 取消。
-	retryRes := DoVoidWithRetry(func() (http.Header, error) {
+	select {
+	case <-ctx.Done():
+		outcome.Error = fmt.Sprintf("等待图片写入被中断: %v", ctx.Err())
+		return outcome
+	case writeSlot <- struct{}{}:
+	}
+	defer func() { <-writeSlot }()
+
+	err = retrySheetImageWrite(ctx, func() error {
 		writeCtx, writeCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer writeCancel()
-		err := WriteSheetImage(writeCtx, spreadsheetToken, item.Cell, imagePath, finalName, uat)
-		return nil, err
-	}, RetryConfig{
-		MaxRetries:       2,
-		MaxTotalAttempts: 5,
-		RetryOnRateLimit: true,
-		Context:          ctx,
+		return WriteSheetImage(writeCtx, spreadsheetToken, item.Cell, imagePath, finalName, uat)
 	})
 
-	if retryRes.Err == nil {
+	if err == nil {
 		outcome.Status = "written"
 		return outcome
 	}
 
-	outcome.Error = fmt.Sprintf("图片写入失败: %v", retryRes.Err)
+	outcome.Error = fmt.Sprintf("图片写入失败: %v", err)
 	return outcome
+}
+
+// retrySheetImageWrite 补充表格特有的限流/前序操作未完成错误，不改变其他业务的重试规则。
+func retrySheetImageWrite(ctx context.Context, write func() error) error {
+	failures := 0
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := write()
+		if err == nil {
+			return nil
+		}
+		rateLimited := IsRateLimitError(err) || HasAPICode(err, 90217)
+		retryable := rateLimited || HasAPICode(err, 90235) || IsRetryableError(err)
+		if !rateLimited {
+			failures++
+		}
+		if !retryable || IsPermanentError(err) || failures > 2 || attempt >= 4 {
+			return err
+		}
+		// values_image 尚未透出响应 Header，沿用共享的全抖动指数退避。
+		timer := time.NewTimer(GetRetryWaitDuration(nil, attempt))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func downloadSheetImage(ctx context.Context, httpClient *http.Client, rawURL string, maxBytes int64, allowPrivateNet bool) (string, string, error) {
@@ -393,10 +443,9 @@ func downloadSheetImage(ctx context.Context, httpClient *http.Client, rawURL str
 		return "", "", fmt.Errorf("图片大小超过上限 %d 字节", maxBytes)
 	}
 
-	mimeType := http.DetectContentType(data)
-	ext, ok := supportedSheetImageMIMEExt(mimeType)
+	ext, ok := detectSheetImageExtension(data)
 	if !ok {
-		return "", "", fmt.Errorf("响应不是支持的图片类型（当前 %s）", mimeType)
+		return "", "", fmt.Errorf("响应不是支持的图片类型（当前 %s）", http.DetectContentType(data))
 	}
 
 	file, err := os.CreateTemp("", "feishu-sheet-img-*"+ext)
@@ -422,7 +471,7 @@ func downloadSheetImage(ctx context.Context, httpClient *http.Client, rawURL str
 		}
 	}
 
-	return tmpPath, suggestedName, nil
+	return tmpPath, normalizeSheetImageName(suggestedName, ext), nil
 }
 
 func validateSheetImageURL(raw string, allowPrivateNet bool) error {
@@ -472,31 +521,62 @@ func validateSheetImageURL(raw string, allowPrivateNet bool) error {
 	return nil
 }
 
-func validateLocalSheetImage(path string, maxBytes int64) error {
+func validateLocalSheetImage(path string, maxBytes int64) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("读取图片文件失败: %w", err)
+		return "", fmt.Errorf("读取图片文件失败: %w", err)
 	}
 	defer file.Close()
 
 	stat, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("读取图片文件信息失败: %w", err)
+		return "", fmt.Errorf("读取图片文件信息失败: %w", err)
 	}
 	if !stat.Mode().IsRegular() || stat.Size() < 1 || stat.Size() > maxBytes {
-		return fmt.Errorf("图片必须是 1-%d 字节的普通文件", maxBytes)
+		return "", fmt.Errorf("图片必须是 1-%d 字节的普通文件", maxBytes)
 	}
 
 	header := make([]byte, 512)
 	n, err := file.Read(header)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("读取图片文件失败: %w", err)
+		return "", fmt.Errorf("读取图片文件失败: %w", err)
 	}
-	mimeType := http.DetectContentType(header[:n])
-	if _, ok := supportedSheetImageMIMEExt(mimeType); !ok {
-		return fmt.Errorf("文件不是支持的图片类型（当前 %s）", mimeType)
+	ext, ok := detectSheetImageExtension(header[:n])
+	if !ok {
+		return "", fmt.Errorf("文件不是支持的图片类型（当前 %s）", http.DetectContentType(header[:n]))
 	}
-	return nil
+	return ext, nil
+}
+
+// detectSheetImageExtension 按文件内容识别格式，补齐标准库未识别的 TIFF/BPG/HEIC。
+// JFIF、EXIF 均为 JPEG 的容器约定，统一通过 JPEG 文件头识别。
+func detectSheetImageExtension(data []byte) (string, bool) {
+	if ext, ok := supportedSheetImageMIMEExt(http.DetectContentType(data)); ok {
+		return ext, true
+	}
+	if bytes.HasPrefix(data, []byte("II*\x00")) || bytes.HasPrefix(data, []byte("MM\x00*")) ||
+		bytes.HasPrefix(data, []byte("II+\x00\x08\x00\x00\x00")) || bytes.HasPrefix(data, []byte("MM\x00+\x00\x08\x00\x00")) {
+		return ".tiff", true
+	}
+	if bytes.HasPrefix(data, []byte("BPG\xfb")) {
+		return ".bpg", true
+	}
+	if len(data) >= 16 && string(data[4:8]) == "ftyp" {
+		boxSize := uint64(binary.BigEndian.Uint32(data[:4]))
+		if boxSize >= 16 {
+			// 仅读取 ftyp box 中的 major/compatible brands，跳过 minor_version。
+			for offset := 8; offset+4 <= len(data) && uint64(offset+4) <= boxSize; offset += 4 {
+				if offset == 12 {
+					continue
+				}
+				switch string(data[offset : offset+4]) {
+				case "heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs":
+					return ".heic", true
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 func supportedSheetImageMIMEExt(mimeType string) (string, bool) {
@@ -509,9 +589,31 @@ func supportedSheetImageMIMEExt(mimeType string) (string, bool) {
 		return ".gif", true
 	case "image/webp":
 		return ".webp", true
+	case "image/bmp", "image/x-ms-bmp":
+		return ".bmp", true
 	default:
 		return "", false
 	}
+}
+
+// normalizeSheetImageName 保留与实际格式相符的后缀，缺失或不符时按内容补正。
+func normalizeSheetImageName(name, ext string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == "." || name == "/" {
+		name = "image"
+	}
+	current := filepath.Ext(name)
+	canonical := strings.ToLower(current)
+	switch canonical {
+	case ".jpeg", ".jfif", ".exif":
+		canonical = ".jpg"
+	case ".tif":
+		canonical = ".tiff"
+	}
+	if canonical == ext {
+		return name
+	}
+	return strings.TrimSuffix(name, current) + ext
 }
 
 // extractCellCoordinate 提取单格坐标（如 "0b1212!B2:B2" -> "B2", "B2:B2" -> "B2", "B2" -> "B2"）

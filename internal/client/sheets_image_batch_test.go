@@ -117,12 +117,12 @@ func TestValidateLocalSheetImage(t *testing.T) {
 	if err := os.WriteFile(pngPath, pngBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateLocalSheetImage(pngPath, 1024); err != nil {
+	if _, err := validateLocalSheetImage(pngPath, 1024); err != nil {
 		t.Fatalf("合法 PNG 校验失败: %v", err)
 	}
 
 	// 2. 超出大小
-	if err := validateLocalSheetImage(pngPath, 10); err == nil {
+	if _, err := validateLocalSheetImage(pngPath, 10); err == nil {
 		t.Error("超过 maxBytes 应报错")
 	}
 
@@ -131,7 +131,7 @@ func TestValidateLocalSheetImage(t *testing.T) {
 	if err := os.WriteFile(txtPath, []byte("hello world"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateLocalSheetImage(txtPath, 1024); err == nil {
+	if _, err := validateLocalSheetImage(txtPath, 1024); err == nil {
 		t.Error("文本文件应校验失败")
 	}
 
@@ -140,7 +140,7 @@ func TestValidateLocalSheetImage(t *testing.T) {
 	if err := os.WriteFile(emptyPath, []byte{}, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateLocalSheetImage(emptyPath, 1024); err == nil {
+	if _, err := validateLocalSheetImage(emptyPath, 1024); err == nil {
 		t.Error("空文件应校验失败")
 	}
 }
