@@ -1,0 +1,105 @@
+# feishu-cli MCP Server — Deployment
+#
+# 无状态形态：凭证与认证 token 全部通过 Secret 环境变量注入，不挂载任何卷。
+# 因此可水平扩展（replicas > 1）、可滚动更新，无需 PVC。
+#
+# 前提：镜像已构建并推送（见 docs/DEPLOY.md 的镜像构建章节），把下面的
+#       image 字段替换为你的实际镜像地址。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feishu-cli-mcp
+  labels:
+    app.kubernetes.io/name: feishu-cli-mcp
+    app.kubernetes.io/component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: feishu-cli-mcp
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: feishu-cli-mcp
+        app.kubernetes.io/component: mcp-server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: feishu-cli-mcp
+          image: feishu-cli-mcp:latest   # ← 替换为你的镜像地址
+          imagePullPolicy: IfNotPresent
+          # 覆盖 Dockerfile 的 CMD，注入 --auth-token。
+          # 注意：$(MCP_AUTH_TOKEN) 由 kubelet 展开（不是 shell 展开），因此
+          # distroless 这种无 shell 镜像同样可用。前提是该 env 在同一容器定义。
+          args:
+            - mcp
+            - stream
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8080"
+            - --auth-token
+            - $(MCP_AUTH_TOKEN)
+          env:
+            - name: FEISHU_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: feishu-cli-mcp-secret
+                  key: FEISHU_APP_ID
+            - name: FEISHU_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: feishu-cli-mcp-secret
+                  key: FEISHU_APP_SECRET
+            - name: MCP_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: feishu-cli-mcp-secret
+                  key: MCP_AUTH_TOKEN
+            # 可选：私有化部署 / 自定义飞书域名时设置。
+            # 默认只允许官方 HTTPS 域名；自定义 host 还需 FEISHU_ALLOW_CUSTOM_BASE_URL=1。
+            # - name: FEISHU_BASE_URL
+            #   value: "https://open.feishu.cn"
+          ports:
+            - name: sse
+              containerPort: 8080
+              protocol: TCP
+          # SSE 服务没有独立的 /healthz 端点，因此用 TCP 探测判断进程是否在监听。
+          # 详见 docs/DEPLOY.md 的「健康检查」章节。
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

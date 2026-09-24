@@ -1,0 +1,59 @@
+# 构建上下文排除项——减小 docker build context、避免把本地状态带进镜像。
+
+# 版本控制与 CI
+.git
+.gitignore
+.github
+
+# 构建产物
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+feishu-cli
+
+# 测试与覆盖率
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# 依赖缓存（构建阶段在容器内重新下载）
+vendor/
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 本地配置与凭证（绝不进镜像）
+.env
+*.env.local
+config.yaml
+config.local.yaml
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.log
+skills/*-workspace/
+
+# Python 缓存（构建不依赖 Python，仅 CI 校验脚本用）
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 导出的资源文件
+/assets/
+*.md.bak
+
+# Agent / 工具链状态
+.rivet/
