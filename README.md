@@ -1661,6 +1661,34 @@ make check-skills       # 重新构建并校验 Skill 结构与命令归属
 go vet ./...
 ```
 
+### 任务编排（Taskfile）
+
+除 Makefile 外，仓库根目录提供 `Taskfile.yml`（需 [Task](https://taskfile.dev)），
+用于版本发布与镜像构建推送：
+
+```bash
+task --list          # 查看全部任务
+task build           # 构建到 bin/（注入版本号）
+task test            # Go 单测 + git-version 脚本行为测试
+task test:scripts    # 只跑 git-version 脚本行为测试
+
+# 发布：先打 tag，再构建推送镜像（镜像 tag 与 git tag 一一对应）
+task tag             # 自动算版本（默认 next）并打 annotated tag + 推送
+task tag -- v1.42.0  # 指定版本号
+task docker          # docker build + push，tag 取当前 git tag
+task docker:build    # 只构建不推送
+```
+
+`task tag` 打 tag 前会校验：工作区干净、自上次 tag 以来有新提交、本地分支未领先远端、
+版本号格式合法。任一不满足即拒绝，不会产生悬挂 tag。
+
+> **首次打 tag 注意**：本仓库此前从未打过 git tag（版本仅记于 CHANGELOG，当前为
+> `v1.41.0`），而 `task tag` 的默认 `next` 版本基于最近 git tag 推导。因此**首次
+> 务必显式指定版本号**，例如 `task tag -- v1.42.0`；否则默认会打出 `v0.0.1`，与实际
+> 版本严重脱节。打过一次 tag 后，后续 `next` 推导即恢复正常。
+
+Kubernetes 部署（Dockerfile / 清单 / 部署步骤）见 docs/DEPLOY.md。
+
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！

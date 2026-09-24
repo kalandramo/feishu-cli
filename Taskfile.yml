@@ -1,0 +1,86 @@
+version: "3"
+
+# feishu-cli 任务编排。
+#
+# 与 Makefile 并存：Makefile 保留原有构建/测试/lint 目标，Taskfile 补充版本发布
+# 与镜像构建推送（tag / docker）。两者不冲突，可按习惯选用。
+#
+# 版本与镜像 tag 一一对应：先 `task tag` 打 git tag，再 `task docker` 构建推送镜像，
+# 镜像 tag 直接取当前 git tag。版本计算逻辑在 scripts/git-version.sh(.ps1)。
+
+vars:
+  # 构建输出目录（沿用 Makefile 的 bin/，.gitignore 已忽略）
+  OUT_DIR: '{{.TASK_DIR}}/bin'
+  BIN_NAME: 'feishu-cli{{if eq OS "windows"}}.exe{{end}}'
+
+  # 镜像仓库地址。替换为你自己的 registry/namespace。
+  IMAGE_REPO: 'registry.example.com/feishu-cli'
+
+tasks:
+  build:
+    desc: 构建 feishu-cli 二进制到 bin/
+    cmds:
+      - mkdir -p "{{.OUT_DIR}}"
+      - go build -ldflags "-X main.Version={{.VERSION}} -X main.BuildTime={{.BUILD_TIME}}" -o "{{.OUT_DIR}}/{{.BIN_NAME}}" .
+    vars:
+      VERSION:
+        sh: 'git describe --tags --always --dirty 2>/dev/null || echo dev'
+      BUILD_TIME:
+        sh: 'date -u "+%Y-%m-%d_%H:%M:%S"'
+
+  run:
+    desc: 构建并运行，例如 task run -- doc list
+    cmds:
+      - task: build
+      - '"{{.OUT_DIR}}/{{.BIN_NAME}}" {{.CLI_ARGS}}'
+    silent: true
+
+  tag:
+    desc: 自动打 git tag 并推送（版本默认取 next：预发布 tag 之后给正式版，否则 patch + 1；可指定，如 task tag -- v2.0.0。打 tag 前校验：工作区干净、有新提交、未领先远端、版本号格式合法；仅推 tag 引用，若本地分支领先远端需先 push）
+    silent: true
+    cmds:
+      # 由 scripts/git-version.sh(.ps1) 的 tag 模式完成：算版本（默认 next，可传 ver）
+      # + 生成提交汇总注释 + 执行 git tag -a + git push origin <ver>。
+      # Windows 用 PowerShell 脚本（sh 在 PowerShell 下不可用），其他平台用 sh 脚本。
+      - '{{if eq OS "windows"}}powershell -NoProfile -ExecutionPolicy Bypass -File scripts/git-version.ps1 tag {{.CLI_ARGS}}{{else}}sh scripts/git-version.sh tag {{.CLI_ARGS}}{{end}}'
+
+  test:
+    desc: 运行全部测试（Go 单测 + git-version 脚本行为测试）
+    cmds:
+      - go test ./...
+      - '{{if eq OS "windows"}}sh scripts/test-git-version.sh ps1{{else}}sh scripts/test-git-version.sh sh{{end}}'
+
+  test:scripts:
+    desc: 只跑 git-version 脚本行为测试（sh 与 ps1 两版）
+    cmds:
+      - sh scripts/test-git-version.sh sh
+      - sh scripts/test-git-version.sh ps1
+
+  docker:
+    desc: 构建和推送 Docker 镜像（tag 固定取当前 git tag，与 git tag 一一对应；发布前先 task tag 打 tag）
+    vars:
+      # 镜像 tag 与 git tag 一一对应：由 scripts/git-version.sh(.ps1) 的 current 模式
+      # 直接取当前 tag（git describe --tags --abbrev=0），无 tag 时回退 v0.0.0。
+      IMAGE_TAG:
+        sh: '{{if eq OS "windows"}}powershell -NoProfile -ExecutionPolicy Bypass -File scripts/git-version.ps1{{else}}sh scripts/git-version.sh{{end}}'
+    cmds:
+      - 'echo ">>> building image tag: {{.IMAGE_TAG}}"'
+      - 'docker build --build-arg VERSION={{.IMAGE_TAG}} -t {{.IMAGE_REPO}}:{{.IMAGE_TAG}} .'
+      - 'docker push {{.IMAGE_REPO}}:{{.IMAGE_TAG}}'
+
+  docker:build:
+    desc: 只构建 Docker 镜像（不推送），tag 取当前 git tag
+    vars:
+      IMAGE_TAG:
+        sh: '{{if eq OS "windows"}}powershell -NoProfile -ExecutionPolicy Bypass -File scripts/git-version.ps1{{else}}sh scripts/git-version.sh{{end}}'
+    cmds:
+      - 'docker build --build-arg VERSION={{.IMAGE_TAG}} -t {{.IMAGE_REPO}}:{{.IMAGE_TAG}} .'
+
+  clean:
+    desc: 删除 bin/ 构建物
+    cmds:
+      - rm -rf "{{.OUT_DIR}}"
+
+  default:
+    cmds:
+      - task: build
