@@ -36,7 +36,7 @@ tasks:
     silent: true
 
   tag:
-    desc: 自动打 git tag 并推送（版本默认取 next：预发布 tag 之后给正式版，否则 patch + 1；可指定，如 task tag -- v2.0.0。打 tag 前校验：工作区干净、有新提交、未领先远端、版本号格式合法；仅推 tag 引用，若本地分支领先远端需先 push）
+    desc: 自动打 git tag 并推送（版本默认取 next：预发布 tag 之后给正式版，否则 patch + 1；可指定，如 task tag -- v2.0.0。注释默认取历史提交汇总，可用 -m 指定自定义，如 task tag -- v2.0.0 -m "发布说明"。打 tag 前校验：工作区干净、有新提交、未领先远端、版本号格式合法；仅推 tag 引用，若本地分支领先远端需先 push）
     silent: true
     cmds:
       # 由 scripts/git-version.sh(.ps1) 的 tag 模式完成：算版本（默认 next，可传 ver）

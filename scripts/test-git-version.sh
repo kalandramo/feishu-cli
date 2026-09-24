@@ -117,6 +117,78 @@ commit x
 if RUN tag "" >/dev/null 2>&1; then ok "空参数走默认 next"; else bad "空参数应走默认 next" ""; fi
 assert_eq "空参数产出的是 next 版本（v0.0.1）" "1" "$(git tag -l | grep -c '^v0[.]0[.]1$')"
 
+# ---------------------------------------------------------------- 特殊字符
+# commit message 含 shell 敏感字符时，注释必须完整传入 git tag。
+# 背景：PowerShell 5.1 向原生 exe 传参不转义内嵌双引号，旧实现用 -m "$note"
+# 会在 message 含 `"` 时报 "fatal: too many arguments"。此用例钉住该回归。
+echo "[特殊字符注释]"
+
+new_repo
+echo b >> f && git commit -aqm 'Revert "x y" and `code` $5 & more'
+git push -q origin HEAD
+BEFORE=$(git tag -l | wc -l)
+if RUN tag >/dev/null 2>&1; then
+    ok "含双引号/反引号/\$ 的 commit 能成功打 tag"
+else
+    bad "含特殊字符的 commit 打 tag 失败" "见上（旧实现报 too many arguments）"
+fi
+assert_eq "特殊字符场景产生了 1 个 tag" "$((BEFORE + 1))" "$(git tag -l | wc -l)"
+# 注释内容必须完整保留（含引号与反引号），且含该提交的 subject
+NOTE=$(git tag -l -n99 | head -5)
+if printf '%s' "$NOTE" | grep -q 'Revert "x y" and `code` \$5 & more'; then
+    ok "tag 注释完整保留特殊字符"
+else
+    bad "tag 注释未完整保留特殊字符" "$NOTE"
+fi
+
+# ---------------------------------------------------------------- 自定义注释
+# -m/--message 指定自定义注释；省略时回退「历史提交汇总」（向后兼容）。
+echo "[自定义注释]"
+
+# 指定 -m：注释等于自定义内容，而非历史提交汇总
+new_repo
+commit x
+if RUN tag v5.5.5 -m "我的发布说明" >/dev/null 2>&1; then
+    ok "指定 -m 能成功打 tag"
+else
+    bad "指定 -m 打 tag 失败" ""
+fi
+assert_eq "自定义注释内容生效" "我的发布说明" "$(git for-each-ref refs/tags/v5.5.5 --format='%(contents:subject)')"
+
+# --message= 等号写法
+new_repo
+commit x
+RUN tag v5.5.6 --message="等号形式" >/dev/null 2>&1
+assert_eq "--message= 等号写法生效" "等号形式" "$(git for-each-ref refs/tags/v5.5.6 --format='%(contents:subject)')"
+
+# 省略 -m：回退历史提交汇总（回归保护，确认没破坏原行为）
+# 无上次 tag 时汇总全部历史，故注释应含 init 与 x 两条。
+new_repo
+commit x
+RUN tag v5.5.7 >/dev/null 2>&1
+NOTE7=$(git for-each-ref refs/tags/v5.5.7 --format='%(contents)')
+if printf '%s' "$NOTE7" | grep -q '^- init$' && printf '%s' "$NOTE7" | grep -q '^- x$'; then
+    ok "省略 -m 回退历史提交汇总（含 init 与 x）"
+else
+    bad "省略 -m 未回退历史汇总" "$NOTE7"
+fi
+
+# 自定义注释含双引号：必须完整保留
+new_repo
+commit x
+RUN tag v5.5.8 -m 'he said "hi" & done' >/dev/null 2>&1
+EXPECT8='he said "hi" & done'
+assert_eq "自定义注释含双引号完整保留" "$EXPECT8" "$(git for-each-ref refs/tags/v5.5.8 --format='%(contents:subject)')"
+
+# 指定 -m 时，即使自上次 tag 以来无新提交也应允许（自定义注释不依赖历史）
+new_repo
+RUN tag v5.5.9 -m "首次发布" >/dev/null 2>&1
+if RUN tag v5.6.0 -m "无新提交也能打" >/dev/null 2>&1; then
+    ok "指定 -m 时无新提交仍可打 tag"
+else
+    bad "指定 -m 时无新提交被打 tag 拒绝" ""
+fi
+
 # ---------------------------------------------------------------- 回归保护
 echo "[既有防线回归]"
 

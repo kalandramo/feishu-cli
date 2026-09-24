@@ -4,8 +4,10 @@
 # 用法：
 #   git-version.sh             # 当前最近的 git tag（无 tag 时回退 v0.0.0）
 #   git-version.sh next        # 建议的下一个 patch 版本（当前 PATCH + 1；无 tag 时 v0.0.1）
-#   git-version.sh tag [ver]   # 自动打 annotated tag：版本默认取 next（可指定 ver），
-#                              # 注释 = 自上次 tag 以来的提交汇总（旧 -> 新）
+#   git-version.sh tag [ver] [-m <msg>]
+#                              # 自动打 annotated tag：版本默认取 next（可指定 ver），
+#                              # 注释默认 = 自上次 tag 以来的提交汇总（旧 -> 新）；
+#                              # 传 -m/--message <msg> 则用自定义注释（不取历史提交）
 #
 # 示例：tag=v1.0.12 -> current 输出 v1.0.12，next 输出 v1.0.13，tag 打 v1.0.13
 #
@@ -16,8 +18,32 @@
 #   4. 指定版本号符合 v<major>.<minor>.<patch>[-预发布] 格式
 set -e
 
-MODE="${1:-current}"
-SPECIFIED="${2:-}"
+# 参数解析：第一个非选项参数是 mode，其后第一个非选项参数是版本号；
+# -m/--message <msg> 指定自定义注释，可出现在任意位置。
+# 支持 -m msg、-m=msg、--message msg、--message=msg 四种写法。
+MODE=""
+SPECIFIED=""
+MESSAGE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -m|--message)
+            shift
+            MESSAGE="${1:-}"
+            ;;
+        -m=*|--message=*)
+            MESSAGE="${1#*=}"
+            ;;
+        *)
+            if [ -z "$MODE" ]; then
+                MODE="$1"
+            elif [ -z "$SPECIFIED" ]; then
+                SPECIFIED="$1"
+            fi
+            ;;
+    esac
+    shift
+done
+MODE="${MODE:-current}"
 
 # 当前 HEAD 可达的最近 tag；无 tag 时回退 v0.0.0（git describe 失败输出到 stderr，静默丢弃）
 RECENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
@@ -85,17 +111,24 @@ if [ "$MODE" = "tag" ]; then
         exit 1
     fi
 
-    # 校验 3：自上次 tag 以来必须有新提交。
-    # 注意：不可用 while read 累积后判空——$(cmd) 展开为空时会留下一行空行，
-    # read 对该空行执行一次循环体，使变量变成 "\n" 而非空串（旧实现的 bug）。
-    if $HAS_TAG; then
-        COMMITS=$(git log "$RECENT_TAG"..HEAD --reverse --format='- %s')
+    # 校验 3：注释来源。
+    # 未指定 -m 时注释取「自上次 tag 以来的提交汇总」，此时必须确有新提交（否则注释为空）。
+    # 指定 -m 时用自定义注释，不依赖提交历史，故跳过「有新提交」校验。
+    if [ -n "$MESSAGE" ]; then
+        NOTE="$MESSAGE"
     else
-        COMMITS=$(git log --reverse --format='- %s')
-    fi
-    if [ -z "$COMMITS" ]; then
-        echo "错误：自上次 tag ($RECENT_TAG) 以来没有新提交，无可汇总的注释。请先提交改动（或确认 HEAD 已领先最近 tag）后再打 tag。" >&2
-        exit 1
+        # 注意：不可用 while read 累积后判空——$(cmd) 展开为空时会留下一行空行，
+        # read 对该空行执行一次循环体，使变量变成 "\n" 而非空串（旧实现的 bug）。
+        if $HAS_TAG; then
+            COMMITS=$(git log "$RECENT_TAG"..HEAD --reverse --format='- %s')
+        else
+            COMMITS=$(git log --reverse --format='- %s')
+        fi
+        if [ -z "$COMMITS" ]; then
+            echo "错误：自上次 tag ($RECENT_TAG) 以来没有新提交，无可汇总的注释。请先提交改动（或确认 HEAD 已领先最近 tag）后再打 tag，或用 -m <msg> 指定自定义注释。" >&2
+            exit 1
+        fi
+        NOTE="$COMMITS"
     fi
 
     # 校验 4：本地分支领先远端时，tag 将指向远端不存在的 commit（悬挂 tag）。
@@ -106,8 +139,15 @@ if [ "$MODE" = "tag" ]; then
         exit 1
     fi
 
-    echo ">>> 自动打 tag: git tag -a $VERSION -m \"<提交汇总>\""
-    git tag -a "$VERSION" -m "$COMMITS"
+    echo ">>> 自动打 tag: git tag -a $VERSION -F <注释文件>"
+    # 用 -F <文件> 而不是 -m <字符串>：自定义注释可能含引号/换行等 shell 敏感字符，
+    # 经文件传递可避免引号转义问题（与 ps1 版保持一致）。
+    NOTE_FILE=$(mktemp)
+    trap 'rm -f "$NOTE_FILE"' EXIT
+    printf '%s\n' "$NOTE" > "$NOTE_FILE"
+    git tag -a "$VERSION" -F "$NOTE_FILE"
+    rm -f "$NOTE_FILE"
+    trap - EXIT
     echo ">>> 已打 tag: $VERSION"
     # 自动推送 tag 到远端（仅推 tag 引用，不推提交；本地分支已被上方校验为与远端同步）
     echo ">>> 自动推送 tag: git push origin $VERSION"
